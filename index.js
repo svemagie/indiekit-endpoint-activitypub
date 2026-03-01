@@ -1,6 +1,7 @@
 import express from "express";
 
 import { setupFederation, buildPersonActor } from "./lib/federation-setup.js";
+import { initRedisCache } from "./lib/redis-cache.js";
 import {
   createFedifyMiddleware,
 } from "./lib/federation-bridge.js";
@@ -1058,6 +1059,11 @@ export default class ActivityPubEndpoint {
     this._seedProfile().catch((error) => {
       console.warn("[ActivityPub] Profile seed failed:", error.message);
     });
+
+    // Initialize Redis cache for plugin-level KV (fedidb, batch-refollow, etc.)
+    if (this.options.redisUrl) {
+      initRedisCache(this.options.redisUrl);
+    }
 
     // Set up Fedify Federation instance
     const { federation } = setupFederation({
