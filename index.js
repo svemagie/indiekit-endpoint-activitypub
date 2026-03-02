@@ -1000,18 +1000,27 @@ export default class ActivityPubEndpoint {
         );
       }
 
-      // Drop non-sparse indexes if they exist (created by earlier versions),
-      // then recreate with sparse:true so multiple null values are allowed.
-      this._collections.ap_muted.dropIndex("url_1").catch(() => {});
-      this._collections.ap_muted.dropIndex("keyword_1").catch(() => {});
-      this._collections.ap_muted.createIndex(
-        { url: 1 },
-        { unique: true, sparse: true, background: true },
-      );
-      this._collections.ap_muted.createIndex(
-        { keyword: 1 },
-        { unique: true, sparse: true, background: true },
-      );
+      // Muted collection — sparse unique indexes (allow multiple null values)
+      this._collections.ap_muted
+        .dropIndex("url_1")
+        .catch(() => {})
+        .then(() =>
+          this._collections.ap_muted.createIndex(
+            { url: 1 },
+            { unique: true, sparse: true, background: true },
+          ),
+        )
+        .catch(() => {});
+      this._collections.ap_muted
+        .dropIndex("keyword_1")
+        .catch(() => {})
+        .then(() =>
+          this._collections.ap_muted.createIndex(
+            { keyword: 1 },
+            { unique: true, sparse: true, background: true },
+          ),
+        )
+        .catch(() => {});
 
       this._collections.ap_blocked.createIndex(
         { url: 1 },
