@@ -1,0 +1,41 @@
+{# Quoted post embed — renders when a post quotes another post #}
+{% if item.quote %}
+  <div class="ap-quote-embed">
+    <a href="{{ mountPath }}/admin/reader/post?url={{ item.quote.uid | urlencode }}" class="ap-quote-embed__link">
+      <header class="ap-quote-embed__author">
+        {% if item.quote.author.photo %}
+          <img src="{{ item.quote.author.photo }}" alt="" class="ap-quote-embed__avatar" loading="lazy" crossorigin="anonymous">
+        {% else %}
+          <span class="ap-quote-embed__avatar ap-quote-embed__avatar--default">{{ item.quote.author.name[0] | upper if item.quote.author.name else "?" }}</span>
+        {% endif %}
+        <div class="ap-quote-embed__author-info">
+          <div class="ap-quote-embed__name">{{ item.quote.author.name or "Unknown" }}</div>
+          {% if item.quote.author.handle %}
+            <div class="ap-quote-embed__handle">{{ item.quote.author.handle }}</div>
+          {% endif %}
+        </div>
+        {% if item.quote.published %}
+          <time datetime="{{ item.quote.published }}" class="ap-quote-embed__time">{{ item.quote.published | date("PPp") }}</time>
+        {% endif %}
+      </header>
+      {% if item.quote.name %}
+        <p class="ap-quote-embed__title">{{ item.quote.name }}</p>
+      {% endif %}
+      {% if item.quote.content and item.quote.content.html %}
+        <div class="ap-quote-embed__content">{{ item.quote.content.html | safe }}</div>
+      {% endif %}
+      {% if item.quote.photo and item.quote.photo.length > 0 %}
+        <div class="ap-quote-embed__media">
+          <img src="{{ item.quote.photo[0] }}" alt="" loading="lazy" class="ap-quote-embed__photo">
+        </div>
+      {% endif %}
+    </a>
+  </div>
+{% elif item.quoteUrl %}
+  {# Fallback: quote not yet fetched — show as styled link #}
+  <div class="ap-quote-embed ap-quote-embed--pending">
+    <a href="{{ mountPath }}/admin/reader/post?url={{ item.quoteUrl | urlencode }}" class="ap-quote-embed__link">
+      Quoted post: {{ item.quoteUrl }}
+    </a>
+  </div>
+{% endif %}

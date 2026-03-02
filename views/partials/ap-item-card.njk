@@ -91,6 +91,9 @@
           </div>
         {% endif %}
 
+        {# Quoted post embed #}
+        {% include "partials/ap-quote-embed.njk" %}
+
         {# Link previews #}
         {% include "partials/ap-link-preview.njk" %}
 
@@ -105,6 +108,9 @@
         {{ item.content.html | safe }}
       </div>
     {% endif %}
+
+    {# Quoted post embed #}
+    {% include "partials/ap-quote-embed.njk" %}
 
     {# Link previews #}
     {% include "partials/ap-link-preview.njk" %}

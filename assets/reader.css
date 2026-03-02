@@ -2343,6 +2343,120 @@
   visibility: hidden;
 }
 
+/* ==========================================================================
+   Quote Embeds
+   ========================================================================== */
+
+.ap-quote-embed {
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  margin-top: var(--space-s);
+  overflow: hidden;
+}
+
+.ap-quote-embed--pending {
+  border-style: dashed;
+}
+
+.ap-quote-embed__link {
+  color: inherit;
+  display: block;
+  padding: var(--space-s) var(--space-m);
+  text-decoration: none;
+}
+
+.ap-quote-embed__link:hover {
+  background: var(--color-offset);
+}
+
+.ap-quote-embed__author {
+  align-items: center;
+  display: flex;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-xs);
+}
+
+.ap-quote-embed__avatar {
+  border-radius: 50%;
+  flex-shrink: 0;
+  height: 24px;
+  object-fit: cover;
+  width: 24px;
+}
+
+.ap-quote-embed__avatar--default {
+  align-items: center;
+  background: var(--color-offset);
+  color: var(--color-on-offset);
+  display: inline-flex;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  justify-content: center;
+}
+
+.ap-quote-embed__author-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ap-quote-embed__name {
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-bold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-quote-embed__handle {
+  color: var(--color-on-offset);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-quote-embed__time {
+  color: var(--color-on-offset);
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.ap-quote-embed__title {
+  font-size: var(--font-size-s);
+  font-weight: var(--font-weight-bold);
+  margin: 0 0 var(--space-xs);
+}
+
+.ap-quote-embed__content {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  color: var(--color-on-background);
+  display: -webkit-box;
+  font-size: var(--font-size-s);
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+.ap-quote-embed__content p {
+  margin: 0 0 var(--space-xs);
+}
+
+.ap-quote-embed__content p:last-child {
+  margin-bottom: 0;
+}
+
+.ap-quote-embed__media {
+  margin-top: var(--space-xs);
+}
+
+.ap-quote-embed__photo {
+  border-radius: var(--border-radius-small);
+  max-height: 160px;
+  max-width: 100%;
+  object-fit: cover;
+}
+
 /* Hashtag tab sources info line */
 .ap-hashtag-sources {
   color: var(--color-on-offset);
