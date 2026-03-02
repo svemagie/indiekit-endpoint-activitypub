@@ -186,4 +186,154 @@ document.addEventListener("alpine:init", () => {
       if (this.observer) this.observer.disconnect();
     },
   }));
+
+  /**
+   * New posts banner — polls for new items every 30s, shows "N new posts" banner.
+   */
+  // eslint-disable-next-line no-undef
+  Alpine.data("apNewPostsBanner", () => ({
+    count: 0,
+    newest: null,
+    tab: "",
+    mountPath: "",
+    _interval: null,
+
+    init() {
+      const el = this.$el;
+      this.newest = el.dataset.newest || null;
+      this.tab = el.dataset.tab || "notes";
+      this.mountPath = el.dataset.mountPath || "";
+
+      if (!this.newest) return;
+
+      this._interval = setInterval(() => this.poll(), 30000);
+    },
+
+    async poll() {
+      if (!this.newest) return;
+      try {
+        const params = new URLSearchParams({ after: this.newest, tab: this.tab });
+        const res = await fetch(
+          `${this.mountPath}/admin/reader/api/timeline/count-new?${params}`,
+          { headers: { Accept: "application/json" } },
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        this.count = data.count || 0;
+      } catch {
+        // Silently ignore polling errors
+      }
+    },
+
+    async loadNew() {
+      if (!this.newest || this.count === 0) return;
+      try {
+        const params = new URLSearchParams({ after: this.newest, tab: this.tab });
+        const res = await fetch(
+          `${this.mountPath}/admin/reader/api/timeline?${params}`,
+          { headers: { Accept: "application/json" } },
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const timeline = document.getElementById("ap-timeline");
+        if (data.html && timeline) {
+          timeline.insertAdjacentHTML("afterbegin", data.html);
+          // Update newest cursor to the first item's published date
+          const firstCard = timeline.querySelector(".ap-card");
+          if (firstCard) {
+            const timeEl = firstCard.querySelector("time[datetime]");
+            if (timeEl) this.newest = timeEl.getAttribute("datetime");
+          }
+        }
+
+        this.count = 0;
+      } catch {
+        // Silently ignore load errors
+      }
+    },
+
+    destroy() {
+      if (this._interval) clearInterval(this._interval);
+    },
+  }));
+
+  /**
+   * Read tracking — IntersectionObserver marks cards as read on 50% visibility.
+   * Batches UIDs and flushes to server every 5 seconds.
+   */
+  // eslint-disable-next-line no-undef
+  Alpine.data("apReadTracker", () => ({
+    _observer: null,
+    _batch: [],
+    _flushTimer: null,
+    _mountPath: "",
+    _csrfToken: "",
+
+    init() {
+      const el = this.$el;
+      this._mountPath = el.dataset.mountPath || "";
+      this._csrfToken = el.dataset.csrfToken || "";
+
+      this._observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              const card = entry.target;
+              const uid = card.dataset.uid;
+              if (uid && !card.classList.contains("ap-card--read")) {
+                card.classList.add("ap-card--read");
+                this._batch.push(uid);
+              }
+              this._observer.unobserve(card);
+            }
+          }
+        },
+        { threshold: 0.5 },
+      );
+
+      // Observe all existing cards
+      this._observeCards();
+
+      // Watch for new cards added by infinite scroll
+      this._mutationObserver = new MutationObserver(() => this._observeCards());
+      this._mutationObserver.observe(el, { childList: true, subtree: true });
+
+      // Flush batch every 5 seconds
+      this._flushTimer = setInterval(() => this._flush(), 5000);
+    },
+
+    _observeCards() {
+      const cards = this.$el.querySelectorAll(".ap-card[data-uid]:not(.ap-card--read)");
+      for (const card of cards) {
+        this._observer.observe(card);
+      }
+    },
+
+    async _flush() {
+      if (this._batch.length === 0) return;
+      const uids = [...this._batch];
+      this._batch = [];
+
+      try {
+        await fetch(`${this._mountPath}/admin/reader/api/timeline/mark-read`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": this._csrfToken,
+          },
+          body: JSON.stringify({ uids }),
+        });
+      } catch {
+        // Non-critical — items will be re-marked on next view
+      }
+    },
+
+    destroy() {
+      if (this._observer) this._observer.disconnect();
+      if (this._mutationObserver) this._mutationObserver.disconnect();
+      if (this._flushTimer) clearInterval(this._flushTimer);
+      this._flush(); // Final flush on teardown
+    },
+  }));
 });

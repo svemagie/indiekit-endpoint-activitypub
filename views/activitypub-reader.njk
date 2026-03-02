@@ -64,32 +64,57 @@
 
   {# Tab navigation #}
   <nav class="ap-tabs" role="tablist">
-    <a href="?tab=notes" class="ap-tab{% if tab == 'notes' %} ap-tab--active{% endif %}" role="tab">
+    <a href="?tab=notes{% if unread %}&unread=1{% endif %}" class="ap-tab{% if tab == 'notes' %} ap-tab--active{% endif %}" role="tab">
       {{ __("activitypub.reader.tabs.notes") }}
     </a>
-    <a href="?tab=articles" class="ap-tab{% if tab == 'articles' %} ap-tab--active{% endif %}" role="tab">
+    <a href="?tab=articles{% if unread %}&unread=1{% endif %}" class="ap-tab{% if tab == 'articles' %} ap-tab--active{% endif %}" role="tab">
       {{ __("activitypub.reader.tabs.articles") }}
     </a>
-    <a href="?tab=replies" class="ap-tab{% if tab == 'replies' %} ap-tab--active{% endif %}" role="tab">
+    <a href="?tab=replies{% if unread %}&unread=1{% endif %}" class="ap-tab{% if tab == 'replies' %} ap-tab--active{% endif %}" role="tab">
       {{ __("activitypub.reader.tabs.replies") }}
     </a>
-    <a href="?tab=boosts" class="ap-tab{% if tab == 'boosts' %} ap-tab--active{% endif %}" role="tab">
+    <a href="?tab=boosts{% if unread %}&unread=1{% endif %}" class="ap-tab{% if tab == 'boosts' %} ap-tab--active{% endif %}" role="tab">
       {{ __("activitypub.reader.tabs.boosts") }}
     </a>
-    <a href="?tab=media" class="ap-tab{% if tab == 'media' %} ap-tab--active{% endif %}" role="tab">
+    <a href="?tab=media{% if unread %}&unread=1{% endif %}" class="ap-tab{% if tab == 'media' %} ap-tab--active{% endif %}" role="tab">
       {{ __("activitypub.reader.tabs.media") }}
     </a>
-    <a href="?tab=all" class="ap-tab{% if tab == 'all' %} ap-tab--active{% endif %}" role="tab">
+    <a href="?tab=all{% if unread %}&unread=1{% endif %}" class="ap-tab{% if tab == 'all' %} ap-tab--active{% endif %}" role="tab">
       {{ __("activitypub.reader.tabs.all") }}
+    </a>
+    <a href="?tab={{ tab }}{% if not unread %}&unread=1{% endif %}" class="ap-tab ap-unread-toggle{% if unread %} ap-unread-toggle--active{% endif %}" title="{% if unread %}Show all posts{% else %}Show unread only{% endif %}">
+      {% if unread %}
+        All posts
+      {% else %}
+        Unread{% if unreadTimelineCount %} ({{ unreadTimelineCount }}){% endif %}
+      {% endif %}
     </a>
   </nav>
 
-  {# Timeline items #}
+  {# New posts banner — polls every 30s, shows count of new items #}
+  {% if items.length > 0 %}
+    <div class="ap-new-posts-banner"
+      x-data="apNewPostsBanner()"
+      data-newest="{{ items[0].published }}"
+      data-tab="{{ tab }}"
+      data-mount-path="{{ mountPath }}"
+      x-show="count > 0"
+      x-cloak>
+      <button class="ap-new-posts-banner__btn" @click="loadNew()">
+        <span x-text="count + ' new post' + (count !== 1 ? 's' : '')"></span> — Load
+      </button>
+    </div>
+  {% endif %}
+
+  {# Timeline items with read tracking #}
   {% if items.length > 0 %}
     <div class="ap-timeline"
       id="ap-timeline"
       data-mount-path="{{ mountPath }}"
-      data-before="{{ before if before else '' }}">
+      data-before="{{ before if before else '' }}"
+      data-csrf-token="{{ csrfToken }}"
+      x-data="apReadTracker()"
+      x-init="init()">
       {% for item in items %}
         {% include "partials/ap-item-card.njk" %}
       {% endfor %}

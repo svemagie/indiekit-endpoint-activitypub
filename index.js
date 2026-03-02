@@ -61,7 +61,7 @@ import {
 } from "./lib/controllers/featured-tags.js";
 import { resolveController } from "./lib/controllers/resolve.js";
 import { tagTimelineController } from "./lib/controllers/tag-timeline.js";
-import { apiTimelineController } from "./lib/controllers/api-timeline.js";
+import { apiTimelineController, countNewController, markReadController } from "./lib/controllers/api-timeline.js";
 import {
   exploreController,
   exploreApiController,
@@ -239,6 +239,8 @@ export default class ActivityPubEndpoint {
     router.get("/admin/reader", readerController(mp));
     router.get("/admin/reader/tag", tagTimelineController(mp));
     router.get("/admin/reader/api/timeline", apiTimelineController(mp));
+    router.get("/admin/reader/api/timeline/count-new", countNewController());
+    router.post("/admin/reader/api/timeline/mark-read", markReadController());
     router.get("/admin/reader/explore", exploreController(mp));
     router.get("/admin/reader/api/explore", exploreApiController(mp));
     router.get("/admin/reader/api/explore/hashtag", hashtagExploreApiController(mp));

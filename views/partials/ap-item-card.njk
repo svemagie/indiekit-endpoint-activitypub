@@ -6,7 +6,7 @@
 {% set hasCardMedia = (item.photo and item.photo.length > 0) or (item.video and item.video.length > 0) or (item.audio and item.audio.length > 0) %}
 {% if hasCardContent or hasCardTitle or hasCardMedia %}
 
-<article class="ap-card{% if item.type %} ap-card--{{ item.type }}{% endif %}{% if item.inReplyTo %} ap-card--reply{% endif %}{% if item._moderated %} ap-card--moderated{% endif %}">
+<article class="ap-card{% if item.type %} ap-card--{{ item.type }}{% endif %}{% if item.inReplyTo %} ap-card--reply{% endif %}{% if item._moderated %} ap-card--moderated{% endif %}{% if item.read %} ap-card--read{% endif %}" data-uid="{{ item.uid }}">
   {# Moderation content warning wrapper #}
   {% if item._moderated %}
     {% if item._moderationReason == "muted_account" %}

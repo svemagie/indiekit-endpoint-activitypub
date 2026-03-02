@@ -2344,6 +2344,63 @@
 }
 
 /* ==========================================================================
+   New Posts Banner
+   ========================================================================== */
+
+.ap-new-posts-banner {
+  left: 0;
+  position: sticky;
+  right: 0;
+  top: 0;
+  z-index: 10;
+}
+
+.ap-new-posts-banner__btn {
+  background: var(--color-primary);
+  border: none;
+  border-radius: var(--border-radius-small);
+  color: var(--color-on-primary);
+  cursor: pointer;
+  display: block;
+  font-family: inherit;
+  font-size: var(--font-size-s);
+  margin: 0 auto var(--space-s);
+  padding: var(--space-xs) var(--space-m);
+  text-align: center;
+  width: auto;
+}
+
+.ap-new-posts-banner__btn:hover {
+  opacity: 0.9;
+}
+
+/* ==========================================================================
+   Read State
+   ========================================================================== */
+
+.ap-card--read {
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+
+.ap-card--read:hover {
+  opacity: 1;
+}
+
+/* ==========================================================================
+   Unread Toggle
+   ========================================================================== */
+
+.ap-unread-toggle {
+  margin-left: auto;
+}
+
+.ap-unread-toggle--active {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  font-weight: var(--font-weight-bold);
+}
+
+/* ==========================================================================
    Quote Embeds
    ========================================================================== */
 
