@@ -53,6 +53,7 @@
         {% else %}
           <span>{% if item.author.nameHtml %}{{ item.author.nameHtml | safe }}{% else %}{{ item.author.name or "Unknown" }}{% endif %}</span>
         {% endif %}
+        {% if item.author.bot %}<span class="ap-card__bot-badge" title="Bot account">BOT</span>{% endif %}
       </div>
       {% if item.author.handle %}
         <div class="ap-card__author-handle">{{ item.author.handle }}</div>
@@ -63,6 +64,7 @@
         <time datetime="{{ item.published }}" class="ap-card__timestamp" x-data x-relative-time>
           {{ item.published | date("PPp") }}
         </time>
+        {% if item.updated %}<span class="ap-card__edited" title="{{ item.updated | date('PPp') }}">✏️</span>{% endif %}
       </a>
     {% endif %}
   </header>
