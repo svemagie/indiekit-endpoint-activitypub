@@ -140,12 +140,15 @@
     {% if before %}
       <div class="ap-load-more"
         id="ap-load-more"
-        data-before="{{ before }}"
-        data-tab="{{ tab }}"
-        data-tag=""
+        data-cursor="{{ before }}"
+        data-api-url="{{ mountPath }}/admin/reader/api/timeline"
+        data-cursor-param="before"
+        data-cursor-field="before"
+        data-timeline-id="ap-timeline"
+        data-extra-params='{{ { tab: tab } | dump }}'
+        data-hide-pagination="ap-reader-pagination"
         x-data="apInfiniteScroll()"
-        x-init="init()"
-        @ap-append-items.window="appendItems($event.detail)">
+        x-init="init()">
         <div class="ap-load-more__sentinel" x-ref="sentinel"></div>
         <button class="ap-load-more__btn" @click="loadMore()" :disabled="loading" x-show="!done">
           <span x-show="!loading">{{ __("activitypub.reader.pagination.loadMore") }}</span>

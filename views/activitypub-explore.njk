@@ -247,11 +247,13 @@
           {% if maxId %}
             <div class="ap-load-more"
               id="ap-explore-load-more"
-              data-max-id="{{ maxId }}"
-              data-instance="{{ instance }}"
-              data-scope="{{ scope }}"
-              data-hashtag="{{ hashtag }}"
-              x-data="apExploreScroll()"
+              data-cursor="{{ maxId }}"
+              data-api-url="{{ mountPath }}/admin/reader/api/explore"
+              data-cursor-param="max_id"
+              data-cursor-field="maxId"
+              data-timeline-id="ap-explore-timeline"
+              data-extra-params='{{ { instance: instance, scope: scope, hashtag: hashtag } | dump }}'
+              x-data="apInfiniteScroll()"
               x-init="init()">
               <div class="ap-load-more__sentinel" x-ref="sentinel"></div>
               <button class="ap-load-more__btn" @click="loadMore()" :disabled="loading" x-show="!done">
@@ -302,10 +304,19 @@
               x-html="tabState[tab._id] ? tabState[tab._id].html : ''">
             </div>
 
-            {# Inline loading spinner for subsequent pages #}
-            <div class="ap-explore-tab-loading ap-explore-tab-loading--more"
-              x-show="tabState[tab._id] && tabState[tab._id].loading && tabState[tab._id].html">
-              <span class="ap-explore-tab-loading__text">{{ __("activitypub.reader.pagination.loading") }}</span>
+            {# Load more button + loading spinner for subsequent pages #}
+            <div class="ap-load-more"
+              x-show="tabState[tab._id] && tabState[tab._id].html && !tabState[tab._id].done">
+              <button class="ap-load-more__btn"
+                x-show="!tabState[tab._id]?.loading"
+                @click="loadMoreTab(tab)"
+                :disabled="tabState[tab._id]?.loading">
+                {{ __("activitypub.reader.pagination.loadMore") }}
+              </button>
+              <span class="ap-explore-tab-loading__text"
+                x-show="tabState[tab._id]?.loading">
+                {{ __("activitypub.reader.pagination.loading") }}
+              </span>
             </div>
 
             {# Empty state — loaded successfully but no posts #}
@@ -357,10 +368,19 @@
               x-html="tabState[tab._id] ? tabState[tab._id].html : ''">
             </div>
 
-            {# Inline loading spinner for subsequent pages #}
-            <div class="ap-explore-tab-loading ap-explore-tab-loading--more"
-              x-show="tabState[tab._id] && tabState[tab._id].loading && tabState[tab._id].html">
-              <span class="ap-explore-tab-loading__text">{{ __("activitypub.reader.pagination.loading") }}</span>
+            {# Load more button + loading spinner for subsequent pages #}
+            <div class="ap-load-more"
+              x-show="tabState[tab._id] && tabState[tab._id].html && !tabState[tab._id].done">
+              <button class="ap-load-more__btn"
+                x-show="!tabState[tab._id]?.loading"
+                @click="loadMoreTab(tab)"
+                :disabled="tabState[tab._id]?.loading">
+                {{ __("activitypub.reader.pagination.loadMore") }}
+              </button>
+              <span class="ap-explore-tab-loading__text"
+                x-show="tabState[tab._id]?.loading">
+                {{ __("activitypub.reader.pagination.loading") }}
+              </span>
             </div>
 
             {# Empty state — no instance tabs pinned yet #}

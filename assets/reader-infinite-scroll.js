@@ -1,121 +1,55 @@
 /**
- * Infinite scroll — AlpineJS component for AJAX load-more on the timeline
- * Registers the `apInfiniteScroll` Alpine data component.
+ * Infinite scroll — unified AlpineJS component for AJAX load-more.
+ * Works for both reader timeline and explore view via data attributes.
+ *
+ * Required data attributes on the component element:
+ *   data-cursor        — initial pagination cursor value
+ *   data-api-url       — API endpoint URL (e.g., /activitypub/admin/reader/api/timeline)
+ *   data-cursor-param  — query param name for the cursor (e.g., "before" or "max_id")
+ *   data-cursor-field  — response JSON field for the next cursor (e.g., "before" or "maxId")
+ *   data-timeline-id   — DOM ID of the timeline container to append HTML into
+ *
+ * Optional:
+ *   data-extra-params  — JSON-encoded object of additional query params
+ *   data-hide-pagination — CSS selector of no-JS pagination to hide
  */
 
 document.addEventListener("alpine:init", () => {
   // eslint-disable-next-line no-undef
-  Alpine.data("apExploreScroll", () => ({
-    loading: false,
-    done: false,
-    maxId: null,
-    instance: "",
-    scope: "local",
-    hashtag: "",
-    observer: null,
-
-    init() {
-      const el = this.$el;
-      this.maxId = el.dataset.maxId || null;
-      this.instance = el.dataset.instance || "";
-      this.scope = el.dataset.scope || "local";
-      this.hashtag = el.dataset.hashtag || "";
-
-      if (!this.maxId) {
-        this.done = true;
-        return;
-      }
-
-      this.observer = new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            if (entry.isIntersecting && !this.loading && !this.done) {
-              this.loadMore();
-            }
-          }
-        },
-        { rootMargin: "200px" }
-      );
-
-      if (this.$refs.sentinel) {
-        this.observer.observe(this.$refs.sentinel);
-      }
-    },
-
-    async loadMore() {
-      if (this.loading || this.done || !this.maxId) return;
-
-      this.loading = true;
-
-      const timeline = document.getElementById("ap-explore-timeline");
-      const mountPath = timeline ? timeline.dataset.mountPath : "";
-
-      const params = new URLSearchParams({
-        instance: this.instance,
-        scope: this.scope,
-        max_id: this.maxId,
-      });
-      // Pass hashtag when in hashtag mode so infinite scroll stays on tag timeline
-      if (this.hashtag) {
-        params.set("hashtag", this.hashtag);
-      }
-
-      try {
-        const res = await fetch(
-          `${mountPath}/admin/reader/api/explore?${params.toString()}`,
-          { headers: { Accept: "application/json" } }
-        );
-
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        const data = await res.json();
-
-        if (data.html && timeline) {
-          timeline.insertAdjacentHTML("beforeend", data.html);
-        }
-
-        if (data.maxId) {
-          this.maxId = data.maxId;
-        } else {
-          this.done = true;
-          if (this.observer) this.observer.disconnect();
-        }
-      } catch (err) {
-        console.error("[ap-explore-scroll] load failed:", err.message);
-      } finally {
-        this.loading = false;
-      }
-    },
-
-    destroy() {
-      if (this.observer) this.observer.disconnect();
-    },
-  }));
-
-  // eslint-disable-next-line no-undef
   Alpine.data("apInfiniteScroll", () => ({
     loading: false,
     done: false,
-    before: null,
-    tab: "",
-    tag: "",
+    cursor: null,
+    apiUrl: "",
+    cursorParam: "before",
+    cursorField: "before",
+    timelineId: "",
+    extraParams: {},
     observer: null,
 
     init() {
       const el = this.$el;
-      this.before = el.dataset.before || null;
-      this.tab = el.dataset.tab || "";
-      this.tag = el.dataset.tag || "";
+      this.cursor = el.dataset.cursor || null;
+      this.apiUrl = el.dataset.apiUrl || "";
+      this.cursorParam = el.dataset.cursorParam || "before";
+      this.cursorField = el.dataset.cursorField || "before";
+      this.timelineId = el.dataset.timelineId || "";
 
-      // Hide the no-JS pagination fallback now that JS is active
-      const paginationEl =
-        document.getElementById("ap-reader-pagination") ||
-        document.getElementById("ap-tag-pagination");
-      if (paginationEl) {
-        paginationEl.style.display = "none";
+      // Parse extra params from JSON data attribute
+      try {
+        this.extraParams = JSON.parse(el.dataset.extraParams || "{}");
+      } catch {
+        this.extraParams = {};
       }
 
-      if (!this.before) {
+      // Hide the no-JS pagination fallback now that JS is active
+      const hideSel = el.dataset.hidePagination;
+      if (hideSel) {
+        const paginationEl = document.getElementById(hideSel);
+        if (paginationEl) paginationEl.style.display = "none";
+      }
+
+      if (!this.cursor) {
         this.done = true;
         return;
       }
@@ -129,7 +63,7 @@ document.addEventListener("alpine:init", () => {
             }
           }
         },
-        { rootMargin: "200px" }
+        { rootMargin: "200px" },
       );
 
       if (this.$refs.sentinel) {
@@ -138,36 +72,36 @@ document.addEventListener("alpine:init", () => {
     },
 
     async loadMore() {
-      if (this.loading || this.done || !this.before) return;
+      if (this.loading || this.done || !this.cursor) return;
 
       this.loading = true;
 
-      const timeline = document.getElementById("ap-timeline");
-      const mountPath = timeline ? timeline.dataset.mountPath : "";
-
-      const params = new URLSearchParams({ before: this.before });
-      if (this.tab) params.set("tab", this.tab);
-      if (this.tag) params.set("tag", this.tag);
+      const params = new URLSearchParams({
+        [this.cursorParam]: this.cursor,
+        ...this.extraParams,
+      });
 
       try {
         const res = await fetch(
-          `${mountPath}/admin/reader/api/timeline?${params.toString()}`,
-          { headers: { Accept: "application/json" } }
+          `${this.apiUrl}?${params.toString()}`,
+          { headers: { Accept: "application/json" } },
         );
 
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const data = await res.json();
 
+        const timeline = this.timelineId
+          ? document.getElementById(this.timelineId)
+          : null;
+
         if (data.html && timeline) {
-          // Append the returned pre-rendered HTML
           timeline.insertAdjacentHTML("beforeend", data.html);
         }
 
-        if (data.before) {
-          this.before = data.before;
+        if (data[this.cursorField]) {
+          this.cursor = data[this.cursorField];
         } else {
-          // No more items
           this.done = true;
           if (this.observer) this.observer.disconnect();
         }
@@ -176,10 +110,6 @@ document.addEventListener("alpine:init", () => {
       } finally {
         this.loading = false;
       }
-    },
-
-    appendItems(/* detail */) {
-      // Custom event hook — not used in this implementation but kept for extensibility
     },
 
     destroy() {
@@ -282,7 +212,9 @@ document.addEventListener("alpine:init", () => {
               const card = entry.target;
               const uid = card.dataset.uid;
               if (uid && !card.classList.contains("ap-card--read")) {
-                card.classList.add("ap-card--read");
+                // Mark read server-side but DON'T dim visually in this session.
+                // Cards only appear dimmed when they arrive from the server
+                // with item.read=true on a subsequent page load.
                 this._batch.push(uid);
               }
               this._observer.unobserve(card);

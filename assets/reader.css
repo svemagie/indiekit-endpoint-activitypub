@@ -2486,13 +2486,19 @@
 }
 
 .ap-quote-embed__content {
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 6;
   color: var(--color-on-background);
-  display: -webkit-box;
   font-size: var(--font-size-s);
   line-height: 1.5;
+  max-height: calc(1.5em * 6);
   overflow: hidden;
+}
+
+.ap-quote-embed__content a {
+  display: inline;
+}
+
+.ap-quote-embed__content a span {
+  display: inline;
 }
 
 .ap-quote-embed__content p {

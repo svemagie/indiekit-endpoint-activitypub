@@ -366,6 +366,16 @@ document.addEventListener("alpine:init", () => {
       }
     },
 
+    // ── Public load-more method (called by button click) ────────────────────
+
+    loadMoreTab(tab) {
+      if (tab.type === "instance") {
+        this._loadMoreInstanceTab(tab);
+      } else if (tab.type === "hashtag") {
+        this._loadMoreHashtagTab(tab);
+      }
+    },
+
     // ── Infinite scroll for tab panels ───────────────────────────────────────
 
     _setupScrollObserver(tab) {

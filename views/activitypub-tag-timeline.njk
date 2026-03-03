@@ -36,6 +36,7 @@
   {# Timeline items #}
   {% if items.length > 0 %}
     <div class="ap-timeline"
+      id="ap-timeline"
       data-mount-path="{{ mountPath }}"
       data-tag="{{ hashtag }}"
       data-before="{{ before if before else '' }}">
@@ -64,12 +65,15 @@
     {% if before %}
       <div class="ap-load-more"
         id="ap-load-more"
-        data-before="{{ before }}"
-        data-tab=""
-        data-tag="{{ hashtag }}"
+        data-cursor="{{ before }}"
+        data-api-url="{{ mountPath }}/admin/reader/api/timeline"
+        data-cursor-param="before"
+        data-cursor-field="before"
+        data-timeline-id="ap-timeline"
+        data-extra-params='{{ { tag: hashtag } | dump }}'
+        data-hide-pagination="ap-tag-pagination"
         x-data="apInfiniteScroll()"
-        x-init="init()"
-        @ap-append-items.window="appendItems($event.detail)">
+        x-init="init()">
         <div class="ap-load-more__sentinel" x-ref="sentinel"></div>
         <button class="ap-load-more__btn" @click="loadMore()" :disabled="loading" x-show="!done">
           <span x-show="!loading">{{ __("activitypub.reader.pagination.loadMore") }}</span>
