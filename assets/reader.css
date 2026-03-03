@@ -763,6 +763,14 @@
   opacity: 0.6;
 }
 
+/* Interaction counts */
+.ap-card__count {
+  font-size: var(--font-size-xs);
+  color: var(--color-on-offset);
+  margin-left: 0.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Error message */
 .ap-card__action-error {
   color: var(--color-error);

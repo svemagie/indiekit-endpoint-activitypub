@@ -149,6 +149,9 @@
   {% set itemUid = item.uid or item.url or item.originalUrl %}
   {% set isLiked = interactionMap[itemUid].like if interactionMap[itemUid] else false %}
   {% set isBoosted = interactionMap[itemUid].boost if interactionMap[itemUid] else false %}
+  {% set replyCount = item.counts.replies if item.counts and item.counts.replies != null else null %}
+  {% set boostCount = item.counts.boosts if item.counts and item.counts.boosts != null else null %}
+  {% set likeCount = item.counts.likes if item.counts and item.counts.likes != null else null %}
   <footer class="ap-card__actions"
     data-item-uid="{{ itemUid }}"
     data-item-url="{{ itemUrl }}"
@@ -160,6 +163,8 @@
       saved: false,
       loading: false,
       error: '',
+      boostCount: {{ boostCount if boostCount != null else 'null' }},
+      likeCount: {{ likeCount if likeCount != null else 'null' }},
       async saveLater() {
         if (this.saved) return;
         const el = this.$root;
@@ -190,11 +195,11 @@
         const itemUid = el.dataset.itemUid;
         const csrfToken = el.dataset.csrfToken;
         const basePath = el.dataset.mountPath;
-        const prev = { liked: this.liked, boosted: this.boosted };
-        if (action === 'like') this.liked = true;
-        else if (action === 'unlike') this.liked = false;
-        else if (action === 'boost') this.boosted = true;
-        else if (action === 'unboost') this.boosted = false;
+        const prev = { liked: this.liked, boosted: this.boosted, boostCount: this.boostCount, likeCount: this.likeCount };
+        if (action === 'like') { this.liked = true; if (this.likeCount !== null) this.likeCount++; }
+        else if (action === 'unlike') { this.liked = false; if (this.likeCount !== null && this.likeCount > 0) this.likeCount--; }
+        else if (action === 'boost') { this.boosted = true; if (this.boostCount !== null) this.boostCount++; }
+        else if (action === 'unboost') { this.boosted = false; if (this.boostCount !== null && this.boostCount > 0) this.boostCount--; }
         try {
           const res = await fetch(basePath + '/admin/reader/' + action, {
             method: 'POST',
@@ -208,11 +213,15 @@
           if (!data.success) {
             this.liked = prev.liked;
             this.boosted = prev.boosted;
+            this.boostCount = prev.boostCount;
+            this.likeCount = prev.likeCount;
             this.error = data.error || 'Failed';
           }
         } catch (e) {
           this.liked = prev.liked;
           this.boosted = prev.boosted;
+          this.boostCount = prev.boostCount;
+          this.likeCount = prev.likeCount;
           this.error = e.message;
         }
         this.loading = false;
@@ -222,14 +231,14 @@
     <a href="{{ mountPath }}/admin/reader/compose?replyTo={{ itemUid | urlencode }}"
        class="ap-card__action ap-card__action--reply"
        title="{{ __('activitypub.reader.actions.reply') }}">
-      ↩ {{ __("activitypub.reader.actions.reply") }}
+      ↩ {{ __("activitypub.reader.actions.reply") }}{% if replyCount != null %}<span class="ap-card__count">{{ replyCount }}</span>{% endif %}
     </a>
     <button class="ap-card__action ap-card__action--boost"
       :class="{ 'ap-card__action--active': boosted }"
       :title="boosted ? '{{ __('activitypub.reader.actions.unboost') }}' : '{{ __('activitypub.reader.actions.boost') }}'"
       :disabled="loading"
       @click="interact(boosted ? 'unboost' : 'boost')">
-      🔁 <span x-text="boosted ? '{{ __('activitypub.reader.actions.boosted') }}' : '{{ __('activitypub.reader.actions.boost') }}'"></span>
+      🔁 <span x-text="boosted ? '{{ __('activitypub.reader.actions.boosted') }}' : '{{ __('activitypub.reader.actions.boost') }}'"></span><template x-if="boostCount !== null"><span class="ap-card__count" x-text="boostCount"></span></template>
     </button>
     <button class="ap-card__action ap-card__action--like"
       :class="{ 'ap-card__action--active': liked }"
@@ -237,7 +246,7 @@
       :disabled="loading"
       @click="interact(liked ? 'unlike' : 'like')">
       <span x-text="liked ? '❤️' : '♥'"></span>
-      <span x-text="liked ? '{{ __('activitypub.reader.actions.liked') }}' : '{{ __('activitypub.reader.actions.like') }}'"></span>
+      <span x-text="liked ? '{{ __('activitypub.reader.actions.liked') }}' : '{{ __('activitypub.reader.actions.like') }}'"></span><template x-if="likeCount !== null"><span class="ap-card__count" x-text="likeCount"></span></template>
     </button>
     <a href="{{ itemUrl }}" class="ap-card__action ap-card__action--link" target="_blank" rel="noopener">
       🔗 {{ __("activitypub.reader.actions.viewOriginal") }}
