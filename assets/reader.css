@@ -2528,3 +2528,12 @@
   padding: var(--space-s) 0 var(--space-xs);
 }
 
+/* Custom emoji */
+.ap-custom-emoji {
+  height: 1.2em;
+  width: auto;
+  vertical-align: middle;
+  display: inline;
+  margin: 0 0.05em;
+}
+

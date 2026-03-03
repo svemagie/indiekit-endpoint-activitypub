@@ -9,7 +9,7 @@
           <span class="ap-quote-embed__avatar ap-quote-embed__avatar--default">{{ item.quote.author.name[0] | upper if item.quote.author.name else "?" }}</span>
         {% endif %}
         <div class="ap-quote-embed__author-info">
-          <div class="ap-quote-embed__name">{{ item.quote.author.name or "Unknown" }}</div>
+          <div class="ap-quote-embed__name">{% if item.quote.author.nameHtml %}{{ item.quote.author.nameHtml | safe }}{% else %}{{ item.quote.author.name or "Unknown" }}{% endif %}</div>
           {% if item.quote.author.handle %}
             <div class="ap-quote-embed__handle">{{ item.quote.author.handle }}</div>
           {% endif %}

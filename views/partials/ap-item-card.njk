@@ -26,7 +26,7 @@
   {# Boost header if this is a boosted post #}
   {% if item.type == "boost" and item.boostedBy %}
     <div class="ap-card__boost">
-      🔁 {% if item.boostedBy.url %}<a href="{{ mountPath }}/admin/reader/profile?url={{ item.boostedBy.url | urlencode }}">{{ item.boostedBy.name or "Someone" }}</a>{% else %}{{ item.boostedBy.name or "Someone" }}{% endif %} {{ __("activitypub.reader.boosted") }}
+      🔁 {% if item.boostedBy.url %}<a href="{{ mountPath }}/admin/reader/profile?url={{ item.boostedBy.url | urlencode }}">{% if item.boostedBy.nameHtml %}{{ item.boostedBy.nameHtml | safe }}{% else %}{{ item.boostedBy.name or "Someone" }}{% endif %}</a>{% else %}{% if item.boostedBy.nameHtml %}{{ item.boostedBy.nameHtml | safe }}{% else %}{{ item.boostedBy.name or "Someone" }}{% endif %}{% endif %} {{ __("activitypub.reader.boosted") }}
     </div>
   {% endif %}
 
@@ -49,9 +49,9 @@
     <div class="ap-card__author-info">
       <div class="ap-card__author-name">
         {% if item.author.url %}
-          <a href="{{ mountPath }}/admin/reader/profile?url={{ item.author.url | urlencode }}">{{ item.author.name or "Unknown" }}</a>
+          <a href="{{ mountPath }}/admin/reader/profile?url={{ item.author.url | urlencode }}">{% if item.author.nameHtml %}{{ item.author.nameHtml | safe }}{% else %}{{ item.author.name or "Unknown" }}{% endif %}</a>
         {% else %}
-          <span>{{ item.author.name or "Unknown" }}</span>
+          <span>{% if item.author.nameHtml %}{{ item.author.nameHtml | safe }}{% else %}{{ item.author.name or "Unknown" }}{% endif %}</span>
         {% endif %}
       </div>
       {% if item.author.handle %}
