@@ -15,7 +15,7 @@
           {% endif %}
         </div>
         {% if item.quote.published %}
-          <time datetime="{{ item.quote.published }}" class="ap-quote-embed__time">{{ item.quote.published | date("PPp") }}</time>
+          <time datetime="{{ item.quote.published }}" class="ap-quote-embed__time" x-data x-relative-time>{{ item.quote.published | date("PPp") }}</time>
         {% endif %}
       </header>
       {% if item.quote.name %}

@@ -60,7 +60,7 @@
     </div>
     {% if item.published %}
       <a href="{{ mountPath }}/admin/reader/post?url={{ (item.uid or item.url) | urlencode }}" class="ap-card__timestamp-link" title="{{ __('activitypub.reader.post.title') }}">
-        <time datetime="{{ item.published }}" class="ap-card__timestamp">
+        <time datetime="{{ item.published }}" class="ap-card__timestamp" x-data x-relative-time>
           {{ item.published | date("PPp") }}
         </time>
       </a>

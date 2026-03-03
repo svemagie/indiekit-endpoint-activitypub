@@ -68,7 +68,7 @@
 
   {# Timestamp #}
   {% if item.published %}
-    <time datetime="{{ item.published }}" class="ap-notification__time">
+    <time datetime="{{ item.published }}" class="ap-notification__time" x-data x-relative-time>
       {{ item.published | date("PPp") }}
     </time>
   {% endif %}
