@@ -256,10 +256,14 @@
               x-data="apInfiniteScroll()"
               x-init="init()">
               <div class="ap-load-more__sentinel" x-ref="sentinel"></div>
-              <button class="ap-load-more__btn" @click="loadMore()" :disabled="loading" x-show="!done">
-                <span x-show="!loading">{{ __("activitypub.reader.pagination.loadMore") }}</span>
-                <span x-show="loading">{{ __("activitypub.reader.pagination.loading") }}</span>
+              <button class="ap-load-more__btn" @click="loadMore()" :disabled="loading" x-show="!done && !loading">
+                {{ __("activitypub.reader.pagination.loadMore") }}
               </button>
+              <div class="ap-skeleton-group" x-show="loading" x-cloak>
+                {% include "partials/ap-skeleton-card.njk" %}
+                {% include "partials/ap-skeleton-card.njk" %}
+                {% include "partials/ap-skeleton-card.njk" %}
+              </div>
               <p class="ap-load-more__done" x-show="done" x-cloak>{{ __("activitypub.reader.pagination.noMore") }}</p>
             </div>
           {% endif %}
@@ -283,10 +287,12 @@
         <template x-if="tab.type === 'instance'">
           <div class="ap-explore-instance-panel">
 
-            {# Loading spinner — first load, no content yet #}
-            <div class="ap-explore-tab-loading"
+            {# Skeleton loaders — first load, no content yet #}
+            <div class="ap-skeleton-group"
               x-show="tabState[tab._id] && tabState[tab._id].loading && !tabState[tab._id].html">
-              <span class="ap-explore-tab-loading__text">{{ __("activitypub.reader.pagination.loading") }}</span>
+              {% include "partials/ap-skeleton-card.njk" %}
+              {% include "partials/ap-skeleton-card.njk" %}
+              {% include "partials/ap-skeleton-card.njk" %}
             </div>
 
             {# Error state with retry #}
@@ -304,7 +310,7 @@
               x-html="tabState[tab._id] ? tabState[tab._id].html : ''">
             </div>
 
-            {# Load more button + loading spinner for subsequent pages #}
+            {# Load more button + skeleton loaders for subsequent pages #}
             <div class="ap-load-more"
               x-show="tabState[tab._id] && tabState[tab._id].html && !tabState[tab._id].done">
               <button class="ap-load-more__btn"
@@ -313,10 +319,11 @@
                 :disabled="tabState[tab._id]?.loading">
                 {{ __("activitypub.reader.pagination.loadMore") }}
               </button>
-              <span class="ap-explore-tab-loading__text"
+              <div class="ap-skeleton-group"
                 x-show="tabState[tab._id]?.loading">
-                {{ __("activitypub.reader.pagination.loading") }}
-              </span>
+                {% include "partials/ap-skeleton-card.njk" %}
+                {% include "partials/ap-skeleton-card.njk" %}
+              </div>
             </div>
 
             {# Empty state — loaded successfully but no posts #}
@@ -347,10 +354,12 @@
               x-text="hashtagSourcesLine(tab)"
               x-cloak></p>
 
-            {# Loading spinner — first load, no content yet #}
-            <div class="ap-explore-tab-loading"
+            {# Skeleton loaders — first load, no content yet #}
+            <div class="ap-skeleton-group"
               x-show="tabState[tab._id] && tabState[tab._id].loading && !tabState[tab._id].html">
-              <span class="ap-explore-tab-loading__text">{{ __("activitypub.reader.pagination.loading") }}</span>
+              {% include "partials/ap-skeleton-card.njk" %}
+              {% include "partials/ap-skeleton-card.njk" %}
+              {% include "partials/ap-skeleton-card.njk" %}
             </div>
 
             {# Error state with retry #}
@@ -368,7 +377,7 @@
               x-html="tabState[tab._id] ? tabState[tab._id].html : ''">
             </div>
 
-            {# Load more button + loading spinner for subsequent pages #}
+            {# Load more button + skeleton loaders for subsequent pages #}
             <div class="ap-load-more"
               x-show="tabState[tab._id] && tabState[tab._id].html && !tabState[tab._id].done">
               <button class="ap-load-more__btn"
@@ -377,10 +386,11 @@
                 :disabled="tabState[tab._id]?.loading">
                 {{ __("activitypub.reader.pagination.loadMore") }}
               </button>
-              <span class="ap-explore-tab-loading__text"
+              <div class="ap-skeleton-group"
                 x-show="tabState[tab._id]?.loading">
-                {{ __("activitypub.reader.pagination.loading") }}
-              </span>
+                {% include "partials/ap-skeleton-card.njk" %}
+                {% include "partials/ap-skeleton-card.njk" %}
+              </div>
             </div>
 
             {# Empty state — no instance tabs pinned yet #}

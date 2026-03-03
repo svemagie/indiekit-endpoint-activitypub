@@ -150,10 +150,14 @@
         x-data="apInfiniteScroll()"
         x-init="init()">
         <div class="ap-load-more__sentinel" x-ref="sentinel"></div>
-        <button class="ap-load-more__btn" @click="loadMore()" :disabled="loading" x-show="!done">
-          <span x-show="!loading">{{ __("activitypub.reader.pagination.loadMore") }}</span>
-          <span x-show="loading">{{ __("activitypub.reader.pagination.loading") }}</span>
+        <button class="ap-load-more__btn" @click="loadMore()" :disabled="loading" x-show="!done && !loading">
+          {{ __("activitypub.reader.pagination.loadMore") }}
         </button>
+        <div class="ap-skeleton-group" x-show="loading" x-cloak>
+          {% include "partials/ap-skeleton-card.njk" %}
+          {% include "partials/ap-skeleton-card.njk" %}
+          {% include "partials/ap-skeleton-card.njk" %}
+        </div>
         <p class="ap-load-more__done" x-show="done" x-cloak>{{ __("activitypub.reader.pagination.noMore") }}</p>
       </div>
     {% endif %}
