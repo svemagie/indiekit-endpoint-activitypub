@@ -976,34 +976,6 @@
   gap: var(--space-m);
 }
 
-.ap-compose__mode {
-  border: var(--border-width-thin) solid var(--color-outline);
-  border-radius: var(--border-radius-small);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-s);
-  padding: var(--space-m);
-}
-
-.ap-compose__mode legend {
-  font-weight: 600;
-}
-
-.ap-compose__mode-option {
-  cursor: pointer;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-}
-
-.ap-compose__mode-hint {
-  color: var(--color-on-offset);
-  display: block;
-  font-size: var(--font-size-s);
-  margin-left: 1.5em;
-  width: 100%;
-}
-
 .ap-compose__editor {
   position: relative;
 }
@@ -1025,21 +997,6 @@
   border-color: var(--color-primary);
   outline: var(--border-width-thick) solid var(--color-primary);
   outline-offset: -2px;
-}
-
-.ap-compose__counter {
-  font-size: var(--font-size-s);
-  padding-top: var(--space-xs);
-  text-align: right;
-}
-
-.ap-compose__counter--warn {
-  color: var(--color-yellow50);
-}
-
-.ap-compose__counter--over {
-  color: var(--color-error);
-  font-weight: 600;
 }
 
 .ap-compose__syndication {
@@ -2835,11 +2792,6 @@
 
   .ap-card:hover {
     box-shadow: 0 2px 8px rgba(255, 255, 255, 0.06);
-  }
-
-  /* --- Compose counter warning --- */
-  .ap-compose__counter--warn {
-    color: var(--color-yellow90);
   }
 
   /* --- Tab badge federated: soften purple --- */

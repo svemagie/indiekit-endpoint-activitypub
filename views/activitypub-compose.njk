@@ -21,50 +21,23 @@
     </div>
   {% endif %}
 
-  <form method="post" action="{{ mountPath }}/admin/reader/compose" class="ap-compose__form"
-    x-data="{
-      mode: 'micropub',
-      content: '',
-      maxChars: 500,
-      get remaining() { return this.maxChars - this.content.length; }
-    }">
+  <form method="post" action="{{ mountPath }}/admin/reader/compose" class="ap-compose__form">
     <input type="hidden" name="_csrf" value="{{ csrfToken }}">
     {% if replyTo %}
       <input type="hidden" name="in-reply-to" value="{{ replyTo }}">
     {% endif %}
 
-    {# Mode toggle #}
-    <fieldset class="ap-compose__mode">
-      <legend>{{ __("activitypub.compose.modeLabel") }}</legend>
-      <label class="ap-compose__mode-option">
-        <input type="radio" name="mode" value="micropub" x-model="mode" checked>
-        {{ __("activitypub.compose.modeMicropub") }}
-        <span class="ap-compose__mode-hint">{{ __("activitypub.compose.modeMicropubHint") }}</span>
-      </label>
-      <label class="ap-compose__mode-option">
-        <input type="radio" name="mode" value="quick" x-model="mode">
-        {{ __("activitypub.compose.modeQuick") }}
-        <span class="ap-compose__mode-hint">{{ __("activitypub.compose.modeQuickHint") }}</span>
-      </label>
-    </fieldset>
-
     {# Content textarea #}
     <div class="ap-compose__editor">
       <textarea name="content" class="ap-compose__textarea"
         rows="6"
-        :maxlength="mode === 'quick' ? maxChars : undefined"
-        x-model="content"
         placeholder="{{ __('activitypub.compose.placeholder') }}"
         required></textarea>
-      <div class="ap-compose__counter" x-show="mode === 'quick'" x-cloak>
-        <span :class="{ 'ap-compose__counter--warn': remaining < 50, 'ap-compose__counter--over': remaining < 0 }"
-          x-text="remaining"></span>
-      </div>
     </div>
 
-    {# Syndication targets (Micropub mode only) #}
+    {# Syndication targets #}
     {% if syndicationTargets.length > 0 %}
-      <fieldset class="ap-compose__syndication" x-show="mode === 'micropub'">
+      <fieldset class="ap-compose__syndication">
         <legend>{{ __("activitypub.compose.syndicateLabel") }}</legend>
         {% for target in syndicationTargets %}
           <label class="ap-compose__syndication-target">
@@ -77,8 +50,7 @@
 
     <div class="ap-compose__actions">
       <button type="submit" class="ap-compose__submit">
-        <span x-show="mode === 'micropub'">{{ __("activitypub.compose.submitMicropub") }}</span>
-        <span x-show="mode === 'quick'">{{ __("activitypub.compose.submitQuick") }}</span>
+        {{ __("activitypub.compose.submitMicropub") }}
       </button>
       <a href="{{ mountPath }}/admin/reader" class="ap-compose__cancel">
         {{ __("activitypub.compose.cancel") }}

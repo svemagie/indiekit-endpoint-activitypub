@@ -141,15 +141,9 @@
     },
     "compose": {
       "title": "Compose reply",
-      "modeLabel": "Reply mode",
-      "modeMicropub": "Post as blog reply",
-      "modeMicropubHint": "Creates a permanent post on your blog, syndicated to the fediverse",
-      "modeQuick": "Quick reply",
-      "modeQuickHint": "Sends a reply directly to the fediverse (no blog post created)",
       "placeholder": "Write your reply…",
       "syndicateLabel": "Syndicate to",
       "submitMicropub": "Post reply",
-      "submitQuick": "Send reply",
       "cancel": "Cancel",
       "errorEmpty": "Reply content cannot be empty"
     },

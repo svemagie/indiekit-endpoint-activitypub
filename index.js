@@ -80,7 +80,6 @@ import { hashtagExploreApiController } from "./lib/controllers/hashtag-explore.j
 import { publicProfileController } from "./lib/controllers/public-profile.js";
 import { authorizeInteractionController } from "./lib/controllers/authorize-interaction.js";
 import { myProfileController } from "./lib/controllers/my-profile.js";
-import { noteObjectController } from "./lib/controllers/note-object.js";
 import {
   refollowPauseController,
   refollowResumeController,
@@ -188,10 +187,6 @@ export default class ActivityPubEndpoint {
       if (req.path.startsWith("/admin")) return next();
       return self._fedifyMiddleware(req, res, next);
     });
-
-    // Serve stored quick reply Notes as JSON-LD so remote servers can
-    // dereference the Note ID during Create activity verification.
-    router.get("/quick-replies/:id", noteObjectController(self));
 
     // Authorize interaction — remote follow / subscribe endpoint.
     // Remote servers redirect users here via the WebFinger subscribe template.
@@ -889,7 +884,6 @@ export default class ActivityPubEndpoint {
     Indiekit.addCollection("ap_muted");
     Indiekit.addCollection("ap_blocked");
     Indiekit.addCollection("ap_interactions");
-    Indiekit.addCollection("ap_notes");
     Indiekit.addCollection("ap_followed_tags");
     // Explore tab collections
     Indiekit.addCollection("ap_explore_tabs");
@@ -911,7 +905,6 @@ export default class ActivityPubEndpoint {
       ap_muted: indiekitCollections.get("ap_muted"),
       ap_blocked: indiekitCollections.get("ap_blocked"),
       ap_interactions: indiekitCollections.get("ap_interactions"),
-      ap_notes: indiekitCollections.get("ap_notes"),
       ap_followed_tags: indiekitCollections.get("ap_followed_tags"),
       // Explore tab collections
       ap_explore_tabs: indiekitCollections.get("ap_explore_tabs"),
