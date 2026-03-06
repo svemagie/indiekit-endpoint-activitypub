@@ -5,7 +5,7 @@
   {% set displayCount = item.photo.length if item.photo.length < 4 else 4 %}
   {% set extraCount = item.photo.length - 4 %}
   {% set totalPhotos = item.photo.length %}
-  <div x-data="{ lightbox: false, idx: 0 }" class="ap-card__gallery ap-card__gallery--{{ displayCount }}">
+  <div x-data="{ lightbox: false, idx: 0, touchX: 0 }" class="ap-card__gallery ap-card__gallery--{{ displayCount }}">
     {% for photo in item.photo %}
       {# Support both old string format and new object format #}
       {% set photoSrc = photo.url if photo.url else photo %}
@@ -36,7 +36,7 @@
 
     {# Lightbox modal — teleported to body to prevent overflow clipping #}
     <template x-teleport="body">
-      <div x-show="lightbox" x-cloak @keydown.escape.window="lightbox = false" @click.self="lightbox = false" class="ap-lightbox" role="dialog" aria-modal="true">
+      <div x-show="lightbox" x-cloak @keydown.escape.window="lightbox = false" @click.self="lightbox = false" @touchstart="touchX = $event.changedTouches[0].clientX" @touchend="let dx = $event.changedTouches[0].clientX - touchX; if (dx < -50) idx = (idx + 1) % {{ totalPhotos }}; else if (dx > 50) idx = (idx - 1 + {{ totalPhotos }}) % {{ totalPhotos }}" class="ap-lightbox" role="dialog" aria-modal="true">
         <button type="button" @click="lightbox = false" class="ap-lightbox__close" aria-label="Close">&times;</button>
         {% if totalPhotos > 1 %}
           <button type="button" @click="idx = (idx - 1 + {{ totalPhotos }}) % {{ totalPhotos }}" class="ap-lightbox__prev" aria-label="Previous image">&lsaquo;</button>
