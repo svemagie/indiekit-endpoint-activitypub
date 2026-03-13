@@ -87,6 +87,7 @@ import {
 } from "./lib/controllers/refollow.js";
 import { startBatchRefollow } from "./lib/batch-refollow.js";
 import { logActivity } from "./lib/activity-log.js";
+import { resolveAuthor } from "./lib/resolve-author.js";
 import { scheduleCleanup } from "./lib/timeline-cleanup.js";
 import { runSeparateMentionsMigration } from "./lib/migrations/separate-mentions.js";
 
@@ -403,6 +404,22 @@ export default class ActivityPubEndpoint {
 
       async syndicate(properties) {
         if (!self._federation) {
+          return undefined;
+        }
+
+        const visibility = String(properties?.visibility || "").toLowerCase();
+        if (visibility === "unlisted") {
+          console.info(
+            "[ActivityPub] Skipping federation for unlisted post: " +
+              (properties?.url || "unknown"),
+          );
+          await logActivity(self._collections.ap_activities, {
+            direction: "outbound",
+            type: "Syndicate",
+            actorUrl: self._publicationUrl,
+            objectUrl: properties?.url,
+            summary: "Syndication skipped: post visibility is unlisted",
+          }).catch(() => {});
           return undefined;
         }
 
@@ -726,6 +743,132 @@ export default class ActivityPubEndpoint {
 
       // Remove locally even if remote delivery fails
       await this._collections.ap_following.deleteOne({ actorUrl }).catch(() => {});
+      return { ok: false, error: error.message };
+    }
+  }
+
+  /**
+   * Send a native AP Like activity for a post URL (called programmatically,
+   * e.g. when a like is created via Micropub).
+   * @param {string} postUrl - URL of the post being liked
+   * @param {object} [collections] - MongoDB collections map (application.collections)
+   * @returns {Promise<{ok: boolean, error?: string}>}
+   */
+  async likePost(postUrl, collections) {
+    if (!this._federation) {
+      return { ok: false, error: "Federation not initialized" };
+    }
+
+    try {
+      const { Like } = await import("@fedify/fedify/vocab");
+      const handle = this.options.actor.handle;
+      const ctx = this._federation.createContext(
+        new URL(this._publicationUrl),
+        { handle, publicationUrl: this._publicationUrl },
+      );
+      const documentLoader = await ctx.getDocumentLoader({ identifier: handle });
+      const cols = collections || this._collections;
+
+      const recipient = await resolveAuthor(postUrl, ctx, documentLoader, cols);
+      if (!recipient) {
+        return { ok: false, error: `Could not resolve post author for ${postUrl}` };
+      }
+
+      const uuid = crypto.randomUUID();
+      const activityId = `${this._publicationUrl.replace(/\/$/, "")}/activitypub/likes/${uuid}`;
+
+      const like = new Like({
+        id: new URL(activityId),
+        actor: ctx.getActorUri(handle),
+        object: new URL(postUrl),
+      });
+
+      await ctx.sendActivity({ identifier: handle }, recipient, like, {
+        orderingKey: postUrl,
+      });
+
+      const interactions = cols?.get?.("ap_interactions") || this._collections.ap_interactions;
+      if (interactions) {
+        await interactions.updateOne(
+          { objectUrl: postUrl, type: "like" },
+          { $set: { objectUrl: postUrl, type: "like", activityId, recipientUrl: recipient.id?.href || "", createdAt: new Date().toISOString() } },
+          { upsert: true },
+        );
+      }
+
+      console.info(`[ActivityPub] Sent Like for ${postUrl}`);
+      return { ok: true };
+    } catch (error) {
+      console.error(`[ActivityPub] likePost failed for ${postUrl}:`, error.message);
+      return { ok: false, error: error.message };
+    }
+  }
+
+  /**
+   * Send a native AP Announce (boost) activity for a post URL (called
+   * programmatically, e.g. when a repost is created via Micropub).
+   * @param {string} postUrl - URL of the post being boosted
+   * @param {object} [collections] - MongoDB collections map (application.collections)
+   * @returns {Promise<{ok: boolean, error?: string}>}
+   */
+  async boostPost(postUrl, collections) {
+    if (!this._federation) {
+      return { ok: false, error: "Federation not initialized" };
+    }
+
+    try {
+      const { Announce } = await import("@fedify/fedify/vocab");
+      const handle = this.options.actor.handle;
+      const ctx = this._federation.createContext(
+        new URL(this._publicationUrl),
+        { handle, publicationUrl: this._publicationUrl },
+      );
+      const documentLoader = await ctx.getDocumentLoader({ identifier: handle });
+      const cols = collections || this._collections;
+
+      const uuid = crypto.randomUUID();
+      const activityId = `${this._publicationUrl.replace(/\/$/, "")}/activitypub/boosts/${uuid}`;
+      const publicAddress = new URL("https://www.w3.org/ns/activitystreams#Public");
+      const followersUri = ctx.getFollowersUri(handle);
+
+      const announce = new Announce({
+        id: new URL(activityId),
+        actor: ctx.getActorUri(handle),
+        object: new URL(postUrl),
+        to: publicAddress,
+        cc: followersUri,
+      });
+
+      // Broadcast to followers
+      await ctx.sendActivity({ identifier: handle }, "followers", announce, {
+        preferSharedInbox: true,
+        syncCollection: true,
+        orderingKey: postUrl,
+      });
+
+      // Also deliver directly to original post author
+      const recipient = await resolveAuthor(postUrl, ctx, documentLoader, cols);
+      if (recipient) {
+        await ctx.sendActivity({ identifier: handle }, recipient, announce, {
+          orderingKey: postUrl,
+        }).catch((err) => {
+          console.warn(`[ActivityPub] Direct boost delivery to author failed: ${err.message}`);
+        });
+      }
+
+      const interactions = cols?.get?.("ap_interactions") || this._collections.ap_interactions;
+      if (interactions) {
+        await interactions.updateOne(
+          { objectUrl: postUrl, type: "boost" },
+          { $set: { objectUrl: postUrl, type: "boost", activityId, createdAt: new Date().toISOString() } },
+          { upsert: true },
+        );
+      }
+
+      console.info(`[ActivityPub] Sent Announce (boost) for ${postUrl}`);
+      return { ok: true };
+    } catch (error) {
+      console.error(`[ActivityPub] boostPost failed for ${postUrl}:`, error.message);
       return { ok: false, error: error.message };
     }
   }
