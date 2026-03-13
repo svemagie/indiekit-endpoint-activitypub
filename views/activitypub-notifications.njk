@@ -48,22 +48,35 @@
     </form>
   </div>
 
-  {% if items.length > 0 %}
-    <div class="ap-timeline">
-      {% for item in items %}
-        {% include "partials/ap-notification-card.njk" %}
-      {% endfor %}
-    </div>
-
-    {# Pagination — preserve active tab #}
-    {% if before %}
-      <nav class="ap-pagination">
-        <a href="?tab={{ tab }}&before={{ before }}" class="ap-pagination__next">
-          {{ __("activitypub.reader.pagination.older") }}
-        </a>
-      </nav>
+  {% if tab == "mention" %}
+    {# DM thread view — grouped by conversation #}
+    {% if conversations and conversations.length > 0 %}
+      <div class="ap-dm-conversations">
+        {% for conv in conversations %}
+          {% include "partials/ap-dm-thread.njk" %}
+        {% endfor %}
+      </div>
+    {% else %}
+      {{ prose({ text: "No direct messages yet." }) }}
     {% endif %}
   {% else %}
-    {{ prose({ text: __("activitypub.notifications.empty") }) }}
+    {% if items.length > 0 %}
+      <div class="ap-timeline">
+        {% for item in items %}
+          {% include "partials/ap-notification-card.njk" %}
+        {% endfor %}
+      </div>
+
+      {# Pagination — preserve active tab #}
+      {% if before %}
+        <nav class="ap-pagination">
+          <a href="?tab={{ tab }}&before={{ before }}" class="ap-pagination__next">
+            {{ __("activitypub.reader.pagination.older") }}
+          </a>
+        </nav>
+      {% endif %}
+    {% else %}
+      {{ prose({ text: __("activitypub.notifications.empty") }) }}
+    {% endif %}
   {% endif %}
 {% endblock %}
