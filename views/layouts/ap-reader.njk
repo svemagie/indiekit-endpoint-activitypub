@@ -10,8 +10,10 @@
   {# Relative timestamps — converts absolute dates to "5m", "3h", "2d" etc. #}
   <script defer src="/assets/@rmdes-indiekit-endpoint-activitypub/reader-relative-time.js"></script>
 
-  {# Alpine.js for client-side reactivity (CW toggles, interaction buttons, infinite scroll) #}
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.9/dist/cdn.min.js"></script>
+  {# Avatar fallback — remove broken images to reveal initials fallback underneath #}
+  <script>document.addEventListener("error",function(e){var t=e.target;if(t.tagName==="IMG"&&t.closest("[data-avatar-fallback]"))t.remove()},true)</script>
+
+  {# Alpine.js loaded by default.njk — AP scripts register via alpine:init before it initializes #}
 
   {# Reader stylesheet — loaded in body is fine for modern browsers #}
   <link rel="stylesheet" href="/assets/@rmdes-indiekit-endpoint-activitypub/reader.css">

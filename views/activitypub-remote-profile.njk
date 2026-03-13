@@ -38,13 +38,11 @@
 
     {# Profile info #}
     <div class="ap-profile__info">
-      <div class="ap-profile__avatar-wrap">
+      <div class="ap-profile__avatar-wrap" data-avatar-fallback>
         {% if icon %}
-          <img src="{{ icon }}" alt="{{ name }}" class="ap-profile__avatar"
-            onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ap-profile__avatar ap-profile__avatar--placeholder',textContent:'{{ name[0] }}'}))">
-        {% else %}
-          <div class="ap-profile__avatar ap-profile__avatar--placeholder">{{ name[0] }}</div>
+        <img src="{{ icon }}" alt="{{ name }}" class="ap-profile__avatar">
         {% endif %}
+        <div class="ap-profile__avatar ap-profile__avatar--placeholder">{{ name[0] }}</div>
       </div>
 
       <div class="ap-profile__details">

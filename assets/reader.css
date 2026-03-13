@@ -32,7 +32,7 @@
 
 .ap-breadcrumb__current {
   color: var(--color-on-background);
-  font-weight: var(--font-weight-bold);
+  font-weight: 600;
 }
 
 /* ==========================================================================
@@ -151,10 +151,10 @@
   background: var(--color-offset);
   border: var(--border-width-thin) solid var(--color-outline);
   border-left: 3px solid var(--color-outline);
-  border-radius: 8px;
+  border-radius: var(--border-radius-small);
   overflow: hidden;
   padding: var(--space-m);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 2px hsl(var(--tint-neutral) 10% / 0.04);
   transition:
     box-shadow 0.2s ease,
     border-color 0.2s ease;
@@ -163,7 +163,7 @@
 .ap-card:hover {
   border-color: var(--color-outline-variant);
   border-left-color: var(--color-outline-variant);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px hsl(var(--tint-neutral) 10% / 0.08);
 }
 
 /* ==========================================================================
@@ -261,13 +261,25 @@
   margin-bottom: var(--space-s);
 }
 
+.ap-card__avatar-wrap {
+  flex-shrink: 0;
+  height: 44px;
+  position: relative;
+  width: 44px;
+}
+
 .ap-card__avatar {
   border: var(--border-width-thin) solid var(--color-outline);
   border-radius: 50%;
-  flex-shrink: 0;
   height: 44px;
   object-fit: cover;
   width: 44px;
+}
+
+.ap-card__avatar-wrap > img {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
 }
 
 .ap-card__avatar--default {
@@ -411,7 +423,7 @@
 
 .ap-card__content code {
   background: var(--color-offset-variant);
-  border-radius: 3px;
+  border-radius: var(--border-radius-small);
   font-size: 0.9em;
   padding: 1px 4px;
 }
@@ -508,7 +520,7 @@
    ========================================================================== */
 
 .ap-card__gallery {
-  border-radius: 6px;
+  border-radius: var(--border-radius-small);
   display: grid;
   gap: 2px;
   margin-bottom: var(--space-s);
@@ -607,7 +619,7 @@
 
 .ap-lightbox {
   align-items: center;
-  background: rgba(0, 0, 0, 0.92);
+  background: hsl(var(--tint-neutral) 10% / 0.92);
   display: flex;
   inset: 0;
   justify-content: center;
@@ -707,7 +719,7 @@
 }
 
 .ap-link-preview__title {
-  font-weight: var(--font-weight-bold);
+  font-weight: 600;
   font-size: var(--font-size-s);
   margin: 0;
   overflow: hidden;
@@ -861,7 +873,7 @@
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--border-radius-small);
   color: var(--color-on-offset);
   cursor: pointer;
   display: inline-flex;
@@ -1188,12 +1200,23 @@
   position: relative;
 }
 
+.ap-notification__avatar-wrap {
+  height: 40px;
+  width: 40px;
+}
+
 .ap-notification__avatar {
   border: var(--border-width-thin) solid var(--color-outline);
   border-radius: 50%;
   height: 40px;
   object-fit: cover;
   width: 40px;
+}
+
+.ap-notification__avatar-wrap > img {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
 }
 
 .ap-notification__avatar--default {
@@ -1319,7 +1342,16 @@
 }
 
 .ap-profile__avatar-wrap {
+  height: 80px;
   margin-bottom: var(--space-s);
+  position: relative;
+  width: 80px;
+}
+
+.ap-profile__avatar-wrap > img {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
 }
 
 .ap-profile__avatar {
@@ -1901,7 +1933,7 @@
 
 .ap-tag-header__title {
   font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
+  font-weight: 600;
   margin: 0 0 var(--space-xs);
 }
 
@@ -2028,7 +2060,7 @@
   border: var(--border-width-thin) solid var(--color-outline);
   border-radius: var(--border-radius-small);
   box-sizing: border-box;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-m);
   min-width: 0;
   padding: var(--space-xs) var(--space-s);
   width: 100%;
@@ -2094,7 +2126,7 @@
   background: var(--color-background);
   border: var(--border-width-thin) solid var(--color-outline);
   border-radius: var(--border-radius-small);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px hsl(var(--tint-neutral) 10% / 0.15);
   left: 0;
   max-height: 320px;
   overflow-y: auto;
@@ -2171,7 +2203,7 @@
   background: var(--color-background);
   border: var(--border-width-thin) solid var(--color-outline);
   border-radius: var(--border-radius-small);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px hsl(var(--tint-neutral) 10% / 0.15);
   left: 0;
   max-height: 320px;
   overflow-y: auto;
@@ -2281,7 +2313,7 @@
 }
 
 .ap-explore-tabs-nav::after {
-  background: linear-gradient(to right, transparent, var(--color-background, #fff) 80%);
+  background: linear-gradient(to right, transparent, var(--color-background) 80%);
   content: "";
   height: 100%;
   pointer-events: none;
@@ -2350,7 +2382,7 @@
 
 /* Scope badges on instance tabs */
 .ap-tab__badge {
-  border-radius: 3px;
+  border-radius: var(--border-radius-small);
   font-size: 0.65em;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -2522,7 +2554,7 @@
 
 .ap-explore-tab-error__retry {
   background: none;
-  border: 1px solid var(--color-primary-on-background);
+  border: var(--border-width-thin) solid var(--color-primary-on-background);
   border-radius: var(--border-radius-small);
   color: var(--color-primary-on-background);
   cursor: pointer;
@@ -2602,7 +2634,7 @@
 
 .ap-unread-toggle--active {
   background: color-mix(in srgb, var(--color-primary) 12%, transparent);
-  font-weight: var(--font-weight-bold);
+  font-weight: 600;
 }
 
 /* ==========================================================================
@@ -2611,7 +2643,7 @@
 
 .ap-quote-embed {
   border: var(--border-width-thin) solid var(--color-outline);
-  border-radius: 8px;
+  border-radius: var(--border-radius-small);
   margin-top: var(--space-s);
   overflow: hidden;
   transition: border-color 0.15s ease;
@@ -2657,7 +2689,7 @@
   color: var(--color-on-offset);
   display: inline-flex;
   font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
+  font-weight: 600;
   justify-content: center;
 }
 
@@ -2668,7 +2700,7 @@
 
 .ap-quote-embed__name {
   font-size: var(--font-size-s);
-  font-weight: var(--font-weight-bold);
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2691,7 +2723,7 @@
 
 .ap-quote-embed__title {
   font-size: var(--font-size-s);
-  font-weight: var(--font-weight-bold);
+  font-weight: 600;
   margin: 0 0 var(--space-xs);
 }
 
@@ -2757,8 +2789,8 @@
   position: absolute;
   bottom: 0.5rem;
   left: 0.5rem;
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
+  background: hsl(var(--tint-neutral) 10% / 0.7);
+  color: var(--color-neutral99);
   font-size: 0.65rem;
   font-weight: 700;
   padding: 0.15rem 0.35rem;
@@ -2771,7 +2803,7 @@
 }
 
 .ap-media__alt-badge:hover {
-  background: rgba(0, 0, 0, 0.9);
+  background: hsl(var(--tint-neutral) 10% / 0.9);
 }
 
 .ap-media__alt-text {
@@ -2779,8 +2811,8 @@
   bottom: 2.2rem;
   left: 0.5rem;
   right: 0.5rem;
-  background: rgba(0, 0, 0, 0.85);
-  color: white;
+  background: hsl(var(--tint-neutral) 10% / 0.85);
+  color: var(--color-neutral99);
   font-size: var(--font-size-s);
   padding: 0.5rem;
   border-radius: var(--border-radius-small);
@@ -2870,11 +2902,11 @@
 
   /* --- Card shadows: use light tint instead of black --- */
   .ap-card {
-    box-shadow: 0 1px 2px rgba(255, 255, 255, 0.04);
+    box-shadow: 0 1px 2px hsl(var(--tint-neutral) 90% / 0.04);
   }
 
   .ap-card:hover {
-    box-shadow: 0 2px 8px rgba(255, 255, 255, 0.06);
+    box-shadow: 0 2px 8px hsl(var(--tint-neutral) 90% / 0.06);
   }
 
   /* --- Tab badge federated: soften purple --- */

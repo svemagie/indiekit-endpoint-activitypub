@@ -91,7 +91,7 @@
                 <label class="label" for="link_value_{{ loop.index }}">{{ __("activitypub.profile.linkValueLabel") }}</label>
                 <input class="input" type="url" id="link_value_{{ loop.index }}" name="link_value[]" value="{{ att.value }}" placeholder="https://example.com">
               </div>
-              <button type="button" class="button button--small" onclick="this.closest('.profile-link-row').remove()" style="margin-block-end: 4px;">{{ __("activitypub.profile.removeLink") }}</button>
+              <button type="button" class="button button--small profile-link-remove" style="margin-block-end: 4px;">{{ __("activitypub.profile.removeLink") }}</button>
             </div>
           {% endfor %}
         {% endif %}
@@ -129,6 +129,11 @@
 
   <script>
     (function() {
+      document.getElementById('profile-links').addEventListener('click', function(e) {
+        var btn = e.target.closest('.profile-link-remove');
+        if (btn) btn.closest('.profile-link-row').remove();
+      });
+
       var linkCount = {{ (profile.attachments.length if profile.attachments) or 0 }};
       document.getElementById('add-link-btn').addEventListener('click', function() {
         linkCount++;
@@ -167,10 +172,9 @@
 
         var removeBtn = document.createElement('button');
         removeBtn.type = 'button';
-        removeBtn.className = 'button button--small';
+        removeBtn.className = 'button button--small profile-link-remove';
         removeBtn.style.cssText = 'margin-block-end: 4px;';
         removeBtn.textContent = 'Remove';
-        removeBtn.addEventListener('click', function() { row.remove(); });
 
         row.appendChild(nameDiv);
         row.appendChild(valueDiv);
