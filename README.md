@@ -1,13 +1,34 @@
-# @rmdes/indiekit-endpoint-activitypub
+# @svemagie/indiekit-endpoint-activitypub
 
 ActivityPub federation endpoint for [Indiekit](https://getindiekit.com), built on [Fedify](https://fedify.dev) 2.0. Makes your IndieWeb site a full fediverse actor — discoverable, followable, and interactive from Mastodon, Misskey, Pixelfed, and any ActivityPub-compatible platform.
+
+This is a fork of [@rmdes/indiekit-endpoint-activitypub](https://github.com/rmdes/indiekit-endpoint-activitypub) by [Ricardo Mendes](https://rmendes.net) ([@rick@rmendes.net](https://rmendes.net)), adding direct message (DM) support.
+
+## Changes in this fork
+
+### Direct messages (DMs)
+
+Private ActivityPub messages (messages addressed only to your actor, with no `as:Public` in `to` or `cc`) are now detected, stored, and handled separately from public mentions.
+
+**Receiving DMs**
+- Incoming `Create(Note)` activities with no public audience are flagged as direct messages
+- Stored in `ap_notifications` with `isDirect: true` and `senderActorUrl`
+- Displayed in a dedicated **🔒 Direct** tab in the notifications view
+- Cards are visually distinguished with an `ap-notification--direct` CSS class and a 🔒 badge instead of the @ mention badge
+
+**Replying to DMs**
+- The compose form detects the DM context from the notification and shows a "🔒 Direct message" notice
+- Syndication targets are hidden (DM replies are never synced to public platforms)
+- The submit button reads "🔒 Send direct reply"
+- On submit, a native ActivityPub `Create(Note)` is sent directly to the original sender's inbox — **Micropub is bypassed entirely**, so no public blog post is created
+- The note is addressed only to the sender; it is never broadcast to followers or the public collection
 
 ## Features
 
 **Federation**
 - Full ActivityPub actor with WebFinger, NodeInfo, HTTP Signatures, and Object Integrity Proofs (Ed25519)
 - Outbox syndication — posts created via Micropub are automatically delivered to followers
-- Inbox processing — receives follows, likes, boosts, replies, mentions, deletes, and account moves
+- Inbox processing — receives follows, likes, boosts, replies, mentions, direct messages, deletes, and account moves
 - Content negotiation — ActivityPub clients requesting your site get JSON-LD; browsers get HTML
 - Reply delivery — replies are addressed to and delivered directly to the original post's author
 - Shared inbox support with collection sync (FEP-8fcf)
@@ -21,8 +42,8 @@ ActivityPub federation endpoint for [Indiekit](https://getindiekit.com), built o
 - Post detail view with threaded context
 - Quote post embeds — quoted posts render as inline cards with author, content, and timestamp (FEP-044f, Misskey, Fedibird formats)
 - Link preview cards via Open Graph metadata unfurling
-- Notifications for likes, boosts, follows, mentions, and replies
-- Compose form with dual-path posting (quick AP reply or Micropub blog post)
+- Notifications for likes, boosts, follows, mentions, replies, and **direct messages**
+- Compose form with dual-path posting (quick AP reply, native AP DM reply, or Micropub blog post)
 - Native interactions (like, boost, reply, follow/unfollow from the reader)
 - Remote actor profile pages
 - Content warnings and sensitive content handling
@@ -73,8 +94,20 @@ ActivityPub federation endpoint for [Indiekit](https://getindiekit.com), built o
 
 ## Installation
 
+Install from GitHub:
+
 ```bash
-npm install @rmdes/indiekit-endpoint-activitypub
+npm install github:svemagie/indiekit-endpoint-activitypub
+```
+
+Or pin to this fork in `package.json` while keeping the original package name (matches the upstream override pattern):
+
+```json
+{
+  "dependencies": {
+    "@rmdes/indiekit-endpoint-activitypub": "github:svemagie/indiekit-endpoint-activitypub"
+  }
+}
 ```
 
 ## Configuration
@@ -179,13 +212,23 @@ When remote servers send activities to your inbox:
 - **Undo(Follow)** → Removed from `ap_followers`
 - **Like** → Logged in activity log, notification created (only for reactions to your own posts)
 - **Announce (Boost)** → Logged + notification (your content) or stored in timeline (followed account)
-- **Create (Note/Article)** → Stored in timeline if from a followed account; notification if it's a reply or mention
+- **Create (Note/Article)** → Stored in timeline if from a followed account; notification if it's a reply or mention; stored as a direct message notification (`isDirect: true`) if addressed only to your actor
 - **Update** → Updates timeline item content or refreshes follower profile data
 - **Delete** → Removes from activity log and timeline
 - **Move** → Updates follower's actor URL
 - **Accept(Follow)** → Marks our follow as accepted
 - **Reject(Follow)** → Marks our follow as rejected
 - **Block** → Removes actor from our followers
+
+### Direct Message Detection
+
+An incoming `Create(Note)` is classified as a direct message when neither the `to` nor `cc` fields contain `https://www.w3.org/ns/activitystreams#Public`. This matches the convention used by Mastodon and other ActivityPub implementations for private/follower-only messages addressed to a specific actor.
+
+The notification is stored with:
+- `isDirect: true`
+- `senderActorUrl` — the full URL of the sender's actor document
+
+On reply, a native `Create(Note)` is built with `to` set only to the sender and sent via `ctx.sendActivity()`. No Micropub request is made, so no blog post is created.
 
 ### Content Negotiation
 
@@ -235,8 +278,8 @@ All admin pages are behind IndieAuth authentication:
 | Hashtag Explore | `/activitypub/admin/reader/explore/hashtag` | Search a hashtag across multiple fediverse instances |
 | Tag Timeline | `/activitypub/admin/reader/tag?tag=name` | Posts filtered by a specific hashtag, with follow/unfollow |
 | Post Detail | `/activitypub/admin/reader/post?url=...` | Single post view with quote embeds and link previews |
-| Notifications | `/activitypub/admin/reader/notifications` | Likes, boosts, follows, mentions, replies |
-| Compose | `/activitypub/admin/reader/compose` | Reply composer (quick AP or Micropub) |
+| Notifications | `/activitypub/admin/reader/notifications` | Likes, boosts, follows, mentions, replies, and direct messages |
+| Compose | `/activitypub/admin/reader/compose` | Reply composer (public AP reply, native AP DM reply, or Micropub) |
 | Moderation | `/activitypub/admin/reader/moderation` | Muted/blocked accounts and keywords |
 | Profile | `/activitypub/admin/profile` | Edit actor display name, bio, avatar, links |
 | Followers | `/activitypub/admin/followers` | List of accounts following you |
@@ -263,7 +306,7 @@ The plugin creates these collections automatically:
 | `ap_featured` | Pinned/featured posts |
 | `ap_featured_tags` | Featured hashtags |
 | `ap_timeline` | Reader timeline items from followed accounts |
-| `ap_notifications` | Interaction notifications |
+| `ap_notifications` | Interaction notifications (includes `isDirect` and `senderActorUrl` fields for DMs) |
 | `ap_muted` | Muted actors and keywords |
 | `ap_blocked` | Blocked actors |
 | `ap_interactions` | Per-post like/boost tracking |
@@ -345,11 +388,14 @@ This is not a bug — Fedify requires explicit opt-in for signed fetches. But it
 - **No image upload in reader** — Compose form is text-only
 - **No custom emoji rendering** — Custom emoji shortcodes display as text
 - **In-process queue without Redis** — Activities may be lost on restart
+- **Existing DMs before this fork** — Notifications received before upgrading to this fork lack `isDirect`/`senderActorUrl` and won't appear in the Direct tab
 
 ## License
 
 MIT
 
-## Author
+## Credits
 
-[Ricardo Mendes](https://rmendes.net) ([@rick@rmendes.net](https://rmendes.net))
+Original package by [Ricardo Mendes](https://rmendes.net) ([@rmdes](https://github.com/rmdes) / [@rick@rmendes.net](https://rmendes.net)).
+
+Fork maintained by [@svemagie](https://github.com/svemagie).
