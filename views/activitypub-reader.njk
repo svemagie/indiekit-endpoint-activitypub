@@ -47,8 +47,7 @@
             :class="{ 'ap-lookup-autocomplete__item--highlighted': index === highlighted }"
             @click="selectItem(item)"
             @mouseenter="highlighted = index">
-            <img :src="item.avatar" :alt="item.name" class="ap-lookup-autocomplete__avatar"
-              onerror="this.style.display='none'">
+            <img :src="item.avatar" :alt="item.name" class="ap-lookup-autocomplete__avatar">
             <span class="ap-lookup-autocomplete__info">
               <span class="ap-lookup-autocomplete__name" x-text="item.name"></span>
               <span class="ap-lookup-autocomplete__handle" x-text="item.handle"></span>
