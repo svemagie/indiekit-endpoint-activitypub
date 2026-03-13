@@ -16,12 +16,22 @@ Private ActivityPub messages (messages addressed only to your actor, with no `as
 - Displayed in a dedicated **🔒 Direct** tab in the notifications view
 - Cards are visually distinguished with an `ap-notification--direct` CSS class and a 🔒 badge instead of the @ mention badge
 
+**Threaded conversation view**
+- The **🔒 Direct** tab groups messages by conversation partner instead of showing a flat list
+- Each conversation shows a chat-style thread: received messages on the left, sent replies on the right, in chronological order
+- An inline reply form at the bottom of each thread lets you reply without leaving the page
+- Sent replies are stored in `ap_notifications` with `direction: "outbound"` so they persist in the thread across reloads
+- After sending, the page redirects back to `?tab=mention` so the updated thread is immediately visible
+
 **Replying to DMs**
-- The compose form detects the DM context from the notification and shows a "🔒 Direct message" notice
-- Syndication targets are hidden (DM replies are never synced to public platforms)
-- The submit button reads "🔒 Send direct reply"
-- On submit, a native ActivityPub `Create(Note)` is sent directly to the original sender's inbox — **Micropub is bypassed entirely**, so no public blog post is created
-- The note is addressed only to the sender; it is never broadcast to followers or the public collection
+- The inline thread reply form (and the standalone compose form) both bypass Micropub — no public blog post is created
+- A native ActivityPub `Create(Note)` is built with `to` set only to the sender's actor URL and sent via `ctx.sendActivity()`
+- The note is never broadcast to followers or the public collection
+- Syndication targets are hidden for DM replies
+
+**Detection**
+- Incoming `Create(Note)` activities are classified as direct messages when neither `to` nor `cc` contains `https://www.w3.org/ns/activitystreams#Public`
+- Tags are iterated via Fedify's `note.getTags()` async generator with `instanceof Mention` / `instanceof Hashtag` checks (Fedify 2.x does not expose a synchronous `.tag` property)
 
 ## Features
 
@@ -388,7 +398,8 @@ This is not a bug — Fedify requires explicit opt-in for signed fetches. But it
 - **No image upload in reader** — Compose form is text-only
 - **No custom emoji rendering** — Custom emoji shortcodes display as text
 - **In-process queue without Redis** — Activities may be lost on restart
-- **Existing DMs before this fork** — Notifications received before upgrading to this fork lack `isDirect`/`senderActorUrl` and won't appear in the Direct tab
+- **Existing DMs before this fork** — Notifications received before upgrading to this fork lack `isDirect`/`senderActorUrl` and won't appear in the Direct tab (resend or patch manually in MongoDB)
+- **No read receipts** — Outbound DMs are stored locally but the recipient receives no read-receipt activity
 
 ## License
 
