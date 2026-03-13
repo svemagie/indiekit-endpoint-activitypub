@@ -1,0 +1,66 @@
+{# DM conversation thread — chat-style view for a single peer #}
+
+<div class="ap-dm-thread{% if conv.hasUnread %} ap-dm-thread--unread{% endif %}">
+
+  {# Conversation header — peer info #}
+  <div class="ap-dm-thread__header">
+    <div class="ap-dm-thread__peer-avatar-wrap">
+      {% if conv.peerPhoto %}
+        <img src="{{ conv.peerPhoto }}" alt="{{ conv.peerName }}" class="ap-dm-thread__peer-avatar" loading="lazy" crossorigin="anonymous"
+          onerror="this.style.display='none';this.nextElementSibling.style.display=''">
+        <span class="ap-dm-thread__peer-avatar ap-dm-thread__peer-avatar--default" style="display:none" aria-hidden="true">
+          {{ conv.peerName[0] | upper if conv.peerName else "?" }}
+        </span>
+      {% else %}
+        <span class="ap-dm-thread__peer-avatar ap-dm-thread__peer-avatar--default" aria-hidden="true">
+          {{ conv.peerName[0] | upper if conv.peerName else "?" }}
+        </span>
+      {% endif %}
+    </div>
+    <div class="ap-dm-thread__peer-info">
+      <a href="{{ conv.peerUrl }}" class="ap-dm-thread__peer-name">
+        {{ conv.peerName or conv.peerHandle or conv.peerUrl }}
+      </a>
+      {% if conv.peerHandle %}
+        <span class="ap-dm-thread__peer-handle">{{ conv.peerHandle }}</span>
+      {% endif %}
+    </div>
+    <span class="ap-dm-thread__lock" title="Direct messages">🔒</span>
+  </div>
+
+  {# Messages in chronological order #}
+  <div class="ap-dm-thread__messages">
+    {% for msg in conv.messages %}
+      <div class="ap-dm-msg{% if msg.direction == 'outbound' %} ap-dm-msg--out{% else %} ap-dm-msg--in{% endif %}">
+        <div class="ap-dm-msg__bubble">
+          {% if msg.content and msg.content.html %}
+            {{ msg.content.html | safe }}
+          {% elif msg.content and msg.content.text %}
+            {{ msg.content.text }}
+          {% endif %}
+        </div>
+        {% if msg.published %}
+          <time datetime="{{ msg.published }}" class="ap-dm-msg__time" x-data x-relative-time>
+            {{ msg.published | date("PPp") }}
+          </time>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+
+  {# Inline reply form #}
+  <form method="post" action="{{ mountPath }}/admin/reader/compose" class="ap-dm-thread__reply-form">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <input type="hidden" name="is-direct" value="true">
+    <input type="hidden" name="sender-actor-url" value="{{ conv.peerUrl }}">
+    {% if conv.messages | length %}
+      <input type="hidden" name="in-reply-to" value="{{ conv.messages[conv.messages | length - 1].url }}">
+    {% endif %}
+    <div class="ap-dm-thread__reply-row">
+      <textarea name="content" class="ap-dm-thread__reply-input" rows="2"
+        placeholder="Reply to {{ conv.peerHandle or conv.peerName or 'this conversation' }}…" required></textarea>
+      <button type="submit" class="ap-dm-thread__reply-send">🔒 Send</button>
+    </div>
+  </form>
+
+</div>
