@@ -82,6 +82,9 @@
     <a href="?tab=all{% if unread %}&unread=1{% endif %}" class="ap-tab{% if tab == 'all' %} ap-tab--active{% endif %}" role="tab">
       {{ __("activitypub.reader.tabs.all") }}
     </a>
+    <a href="?tab=direct" class="ap-tab{% if tab == 'direct' %} ap-tab--active{% endif %}" role="tab">
+      🔒 Direct
+    </a>
     <a href="?tab={{ tab }}{% if not unread %}&unread=1{% endif %}" class="ap-tab ap-unread-toggle{% if unread %} ap-unread-toggle--active{% endif %}" title="{% if unread %}Show all posts{% else %}Show unread only{% endif %}">
       {% if unread %}
         All posts
@@ -106,8 +109,20 @@
     </div>
   {% endif %}
 
+  {# Direct messages — conversation threads #}
+  {% if tab == "direct" %}
+    {% if conversations and conversations.length > 0 %}
+      <div class="ap-dm-conversations">
+        {% for conv in conversations %}
+          {% include "partials/ap-dm-thread.njk" %}
+        {% endfor %}
+      </div>
+    {% else %}
+      {{ prose({ text: "No direct messages yet." }) }}
+    {% endif %}
+
   {# Timeline items with read tracking #}
-  {% if items.length > 0 %}
+  {% elif items.length > 0 %}
     <div class="ap-timeline"
       id="ap-timeline"
       data-mount-path="{{ mountPath }}"
