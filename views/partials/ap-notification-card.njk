@@ -1,6 +1,6 @@
 {# Notification card partial #}
 
-<div class="ap-notification{% if not item.read %} ap-notification--unread{% endif %}">
+<div class="ap-notification{% if not item.read %} ap-notification--unread{% endif %}{% if item.isDirect %} ap-notification--direct{% endif %}">
   {# Dismiss button #}
   <form method="post" action="{{ mountPath }}/admin/reader/notifications/delete" class="ap-notification__dismiss">
     <input type="hidden" name="_csrf" value="{{ csrfToken }}">
@@ -18,7 +18,7 @@
       <span class="ap-notification__avatar ap-notification__avatar--default" aria-hidden="true">{{ item.actorName[0] | upper if item.actorName else "?" }}</span>
     {% endif %}
     <span class="ap-notification__type-badge">
-      {% if item.type == "like" %}❤{% elif item.type == "boost" %}🔁{% elif item.type == "follow" %}👤{% elif item.type == "reply" %}💬{% elif item.type == "mention" %}@{% endif %}
+      {% if item.type == "like" %}❤{% elif item.type == "boost" %}🔁{% elif item.type == "follow" %}👤{% elif item.type == "reply" %}💬{% elif item.type == "mention" %}{% if item.isDirect %}🔒{% else %}@{% endif %}{% endif %}
     </span>
   </div>
 

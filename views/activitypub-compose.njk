@@ -21,10 +21,20 @@
     </div>
   {% endif %}
 
+  {% if isDirect %}
+    <div class="ap-compose__dm-notice">
+      🔒 {{ __("activitypub.compose.directNotice") if __("activitypub.compose.directNotice") != "activitypub.compose.directNotice" else "Direct message — reply stays private" }}
+    </div>
+  {% endif %}
+
   <form method="post" action="{{ mountPath }}/admin/reader/compose" class="ap-compose__form">
     <input type="hidden" name="_csrf" value="{{ csrfToken }}">
     {% if replyTo %}
       <input type="hidden" name="in-reply-to" value="{{ replyTo }}">
+    {% endif %}
+    {% if isDirect %}
+      <input type="hidden" name="is-direct" value="true">
+      <input type="hidden" name="sender-actor-url" value="{{ senderActorUrl }}">
     {% endif %}
 
     {# Content textarea #}
@@ -35,8 +45,8 @@
         required></textarea>
     </div>
 
-    {# Syndication targets #}
-    {% if syndicationTargets.length > 0 %}
+    {# Syndication targets — hidden for direct messages #}
+    {% if syndicationTargets.length > 0 and not isDirect %}
       <fieldset class="ap-compose__syndication">
         <legend>{{ __("activitypub.compose.syndicateLabel") }}</legend>
         {% for target in syndicationTargets %}
@@ -50,9 +60,13 @@
 
     <div class="ap-compose__actions">
       <button type="submit" class="ap-compose__submit">
-        {{ __("activitypub.compose.submitMicropub") }}
+        {% if isDirect %}
+          🔒 {{ __("activitypub.compose.submitDirect") if __("activitypub.compose.submitDirect") != "activitypub.compose.submitDirect" else "Send direct reply" }}
+        {% else %}
+          {{ __("activitypub.compose.submitMicropub") }}
+        {% endif %}
       </button>
-      <a href="{{ mountPath }}/admin/reader" class="ap-compose__cancel">
+      <a href="{{ mountPath }}/admin/reader/notifications" class="ap-compose__cancel">
         {{ __("activitypub.compose.cancel") }}
       </a>
     </div>
