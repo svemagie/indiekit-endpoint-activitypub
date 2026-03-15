@@ -99,6 +99,13 @@ import { logActivity } from "./lib/activity-log.js";
 import { scheduleCleanup } from "./lib/timeline-cleanup.js";
 import { runSeparateMentionsMigration } from "./lib/migrations/separate-mentions.js";
 import { deleteFederationController } from "./lib/controllers/federation-delete.js";
+import {
+  federationMgmtController,
+  rebroadcastController,
+  viewApJsonController,
+  broadcastActorUpdateController,
+  lookupObjectController,
+} from "./lib/controllers/federation-mgmt.js";
 
 const defaults = {
   mountPath: "/activitypub",
@@ -167,6 +174,11 @@ export default class ActivityPubEndpoint {
       {
         href: `${this.options.mountPath}/admin/my-profile`,
         text: "activitypub.myProfile.title",
+        requiresDatabase: true,
+      },
+      {
+        href: `${this.options.mountPath}/admin/federation`,
+        text: "activitypub.federationMgmt.title",
         requiresDatabase: true,
       },
     ];
@@ -313,6 +325,11 @@ export default class ActivityPubEndpoint {
     router.post("/admin/refollow/resume", refollowResumeController(mp, this));
     router.get("/admin/refollow/status", refollowStatusController(mp));
     router.post("/admin/federation/delete", deleteFederationController(mp, this));
+    router.get("/admin/federation", federationMgmtController(mp, this));
+    router.post("/admin/federation/rebroadcast", rebroadcastController(mp, this));
+    router.get("/admin/federation/ap-json", viewApJsonController(mp, this));
+    router.post("/admin/federation/broadcast-actor", broadcastActorUpdateController(mp, this));
+    router.get("/admin/federation/lookup", lookupObjectController(mp, this));
 
     return router;
   }
@@ -325,6 +342,38 @@ export default class ActivityPubEndpoint {
   get contentNegotiationRoutes() {
     const router = express.Router(); // eslint-disable-line new-cap
     const self = this;
+
+    // Intercept Micropub delete actions to broadcast Delete to fediverse.
+    // Wraps res.json to detect successful delete responses, then fires
+    // broadcastDelete asynchronously so remote servers remove the post.
+    router.use((req, res, next) => {
+      if (req.method !== "POST") return next();
+      if (!req.path.endsWith("/micropub")) return next();
+
+      const action = req.query?.action || req.body?.action;
+      if (action !== "delete") return next();
+
+      const postUrl = req.query?.url || req.body?.url;
+      if (!postUrl) return next();
+
+      const originalJson = res.json.bind(res);
+      res.json = function (body) {
+        // Fire broadcastDelete after successful delete (status 200)
+        if (res.statusCode === 200 && body?.success === "delete") {
+          console.info(
+            `[ActivityPub] Micropub delete detected for ${postUrl}, broadcasting Delete to followers`,
+          );
+          self.broadcastDelete(postUrl).catch((error) => {
+            console.warn(
+              `[ActivityPub] broadcastDelete after Micropub delete failed: ${error.message}`,
+            );
+          });
+        }
+        return originalJson(body);
+      };
+
+      return next();
+    });
 
     // Let Fedify handle NodeInfo data (/nodeinfo/2.1)
     // Only pass GET/HEAD requests — POST/PUT/DELETE must not go through
@@ -483,6 +532,7 @@ export default class ActivityPubEndpoint {
                 resolvedMentions.push({
                   handle,
                   actorUrl: mentionedActor.id.href,
+                  profileUrl: mentionedActor.url?.href || null,
                 });
                 mentionRecipients.push({
                   handle,

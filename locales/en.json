@@ -322,6 +322,27 @@
       "deleteSuccess": "Delete activity sent to followers",
       "deleteButton": "Delete from fediverse"
     },
+    "federationMgmt": {
+      "title": "Federation",
+      "collections": "Collection health",
+      "quickActions": "Quick actions",
+      "broadcastActor": "Broadcast actor update",
+      "debugDashboard": "Debug dashboard",
+      "objectLookup": "Object lookup",
+      "lookupPlaceholder": "URL or @user@domain handle…",
+      "lookup": "Look up",
+      "lookupLoading": "Resolving…",
+      "postActions": "Post federation",
+      "viewJson": "JSON",
+      "rebroadcast": "Re-broadcast Create activity",
+      "rebroadcastShort": "Re-send",
+      "broadcastDelete": "Broadcast Delete activity",
+      "deleteShort": "Delete",
+      "noPosts": "No posts found.",
+      "apJsonTitle": "ActivityStreams JSON-LD",
+      "recentActivity": "Recent activity",
+      "viewAllActivities": "View all activities →"
+    },
     "reports": {
       "sentReport": "filed a report",
       "title": "Reports"
