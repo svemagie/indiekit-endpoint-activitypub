@@ -1,0 +1,245 @@
+{% extends "layouts/ap-reader.njk" %}
+
+{% from "card/macro.njk" import card with context %}
+{% from "badge/macro.njk" import badge with context %}
+{% from "prose/macro.njk" import prose with context %}
+{% from "pagination/macro.njk" import pagination with context %}
+
+{% block readercontent %}
+  <div x-data="federationMgmt()" data-mount-path="{{ mountPath }}" data-csrf-token="{{ csrfToken }}">
+
+  {# --- Collection Health --- #}
+  <section class="ap-federation__section">
+    <h2>{{ __("activitypub.federationMgmt.collections") }}</h2>
+    <div class="ap-federation__stats-grid">
+      {% for stat in collectionStats %}
+        <div class="ap-federation__stat-card">
+          <span class="ap-federation__stat-count">{{ stat.count }}</span>
+          <span class="ap-federation__stat-label">{{ stat.name | replace("ap_", "") }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {# --- Quick Actions --- #}
+  <section class="ap-federation__section">
+    <h2>{{ __("activitypub.federationMgmt.quickActions") }}</h2>
+    <div class="ap-federation__actions-row">
+      <button class="button" @click="broadcastActorUpdate()" :disabled="actionInProgress">
+        {{ __("activitypub.federationMgmt.broadcastActor") }}
+      </button>
+      {% if debugDashboardEnabled %}
+        <a href="{{ mountPath }}/__debug__/" class="button" target="_blank" rel="noopener">
+          {{ __("activitypub.federationMgmt.debugDashboard") }}
+        </a>
+      {% endif %}
+    </div>
+    <p x-show="actionResult" x-text="actionResult" class="ap-federation__result" x-cloak></p>
+  </section>
+
+  {# --- Object Lookup --- #}
+  <section class="ap-federation__section">
+    <h2>{{ __("activitypub.federationMgmt.objectLookup") }}</h2>
+    <form class="ap-federation__lookup-form" @submit.prevent="lookupObject()">
+      <input type="text" x-model="lookupQuery"
+        placeholder="{{ __('activitypub.federationMgmt.lookupPlaceholder') }}"
+        class="ap-federation__lookup-input">
+      <button type="submit" class="button" :disabled="lookupLoading">
+        <span x-show="!lookupLoading">{{ __("activitypub.federationMgmt.lookup") }}</span>
+        <span x-show="lookupLoading" x-cloak>{{ __("activitypub.federationMgmt.lookupLoading") }}</span>
+      </button>
+    </form>
+    <p x-show="lookupError" x-text="lookupError" class="ap-federation__error" x-cloak></p>
+    <pre x-show="lookupResult" x-text="lookupResult" class="ap-federation__json-view" x-cloak></pre>
+  </section>
+
+  {# --- Post Federation --- #}
+  <section class="ap-federation__section">
+    <h2>{{ __("activitypub.federationMgmt.postActions") }}</h2>
+    {% if posts.length > 0 %}
+      <div class="ap-federation__posts-list">
+        {% for post in posts %}
+          <div class="ap-federation__post-row">
+            <div class="ap-federation__post-info">
+              <a href="{{ post.url }}" class="ap-federation__post-title">{{ post.name }}</a>
+              <span class="ap-federation__post-meta">
+                {{ badge({ text: post.postType }) }}
+                {% if post.published %}
+                  <time>{{ post.published | date("PP") }}</time>
+                {% endif %}
+                {% if post.deleted %}
+                  {{ badge({ text: "deleted", color: "red" }) }}
+                {% endif %}
+              </span>
+            </div>
+            <div class="ap-federation__post-actions">
+              <button class="ap-federation__post-btn"
+                @click="viewApJson('{{ post.url }}')">
+                {{ __("activitypub.federationMgmt.viewJson") }}
+              </button>
+              <button class="ap-federation__post-btn"
+                @click="rebroadcast('{{ post.url }}')">
+                {{ __("activitypub.federationMgmt.rebroadcastShort") }}
+              </button>
+              <button class="ap-federation__post-btn ap-federation__post-btn--danger"
+                @click="broadcastDelete('{{ post.url }}')">
+                {{ __("activitypub.federationMgmt.deleteShort") }}
+              </button>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+      {{ pagination(cursor) if cursor }}
+    {% else %}
+      {{ prose({ text: __("activitypub.federationMgmt.noPosts") }) }}
+    {% endif %}
+  </section>
+
+  {# --- Recent Activity --- #}
+  <section class="ap-federation__section">
+    <h2>{{ __("activitypub.federationMgmt.recentActivity") }}</h2>
+    {% if recentActivities.length > 0 %}
+      {% for activity in recentActivities %}
+        {{ card({
+          title: activity.actorName or activity.actorUrl,
+          description: { text: activity.summary },
+          published: activity.receivedAt,
+          badges: [
+            { text: activity.type },
+            { text: __("activitypub.directionInbound") if activity.direction === "inbound" else __("activitypub.directionOutbound") }
+          ]
+        }) }}
+      {% endfor %}
+      <p><a href="{{ mountPath }}/admin/activities">{{ __("activitypub.federationMgmt.viewAllActivities") }}</a></p>
+    {% else %}
+      {{ prose({ text: __("activitypub.noActivity") }) }}
+    {% endif %}
+  </section>
+
+  {# --- JSON Modal --- #}
+  <div class="ap-federation__modal-overlay" x-show="jsonModalOpen" x-cloak
+    @click.self="jsonModalOpen = false" @keydown.escape.window="jsonModalOpen = false">
+    <div class="ap-federation__modal">
+      <div class="ap-federation__modal-header">
+        <h3>{{ __("activitypub.federationMgmt.apJsonTitle") }}</h3>
+        <button class="ap-federation__modal-close" @click="jsonModalOpen = false">&times;</button>
+      </div>
+      <pre x-text="jsonModalData" class="ap-federation__json-view"></pre>
+    </div>
+  </div>
+
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('federationMgmt', () => ({
+        actionInProgress: false,
+        actionResult: '',
+        lookupQuery: '',
+        lookupLoading: false,
+        lookupError: '',
+        lookupResult: '',
+        jsonModalOpen: false,
+        jsonModalData: '',
+
+        get mountPath() { return this.$root.dataset.mountPath; },
+        get csrfToken() { return this.$root.dataset.csrfToken; },
+
+        async broadcastActorUpdate() {
+          this.actionInProgress = true;
+          this.actionResult = '';
+          try {
+            const res = await fetch(this.mountPath + '/admin/federation/broadcast-actor', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': this.csrfToken,
+              },
+              body: JSON.stringify({}),
+            });
+            const data = await res.json();
+            this.actionResult = data.success ? 'Actor update broadcast sent.' : (data.error || 'Failed');
+          } catch {
+            this.actionResult = 'Request failed';
+          }
+          this.actionInProgress = false;
+          setTimeout(() => { this.actionResult = ''; }, 5000);
+        },
+
+        async lookupObject() {
+          const q = this.lookupQuery.trim();
+          if (!q) return;
+          this.lookupLoading = true;
+          this.lookupError = '';
+          this.lookupResult = '';
+          try {
+            const res = await fetch(this.mountPath + '/admin/federation/lookup?q=' + encodeURIComponent(q));
+            const data = await res.json();
+            if (data.error) {
+              this.lookupError = data.error;
+            } else {
+              this.lookupResult = JSON.stringify(data, null, 2);
+            }
+          } catch {
+            this.lookupError = 'Request failed';
+          }
+          this.lookupLoading = false;
+        },
+
+        async viewApJson(url) {
+          try {
+            const res = await fetch(this.mountPath + '/admin/federation/ap-json?url=' + encodeURIComponent(url));
+            const data = await res.json();
+            if (data.error) {
+              this.jsonModalData = 'Error: ' + data.error;
+            } else {
+              this.jsonModalData = JSON.stringify(data, null, 2);
+            }
+            this.jsonModalOpen = true;
+          } catch {
+            this.jsonModalData = 'Request failed';
+            this.jsonModalOpen = true;
+          }
+        },
+
+        async rebroadcast(url) {
+          if (!confirm('Re-send this post to all followers?')) return;
+          try {
+            const res = await fetch(this.mountPath + '/admin/federation/rebroadcast', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': this.csrfToken,
+              },
+              body: JSON.stringify({ url }),
+            });
+            const data = await res.json();
+            this.actionResult = data.success ? 'Post re-broadcast sent.' : (data.error || 'Failed');
+          } catch {
+            this.actionResult = 'Request failed';
+          }
+          setTimeout(() => { this.actionResult = ''; }, 5000);
+        },
+
+        async broadcastDelete(url) {
+          if (!confirm('Broadcast Delete for this post? Remote servers will remove it.')) return;
+          try {
+            const res = await fetch(this.mountPath + '/admin/federation/delete', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': this.csrfToken,
+              },
+              body: JSON.stringify({ url }),
+            });
+            const data = await res.json();
+            this.actionResult = data.success ? 'Delete broadcast sent.' : (data.error || 'Failed');
+          } catch {
+            this.actionResult = 'Request failed';
+          }
+          setTimeout(() => { this.actionResult = ''; }, 5000);
+        },
+      }));
+    });
+  </script>
+{% endblock %}
