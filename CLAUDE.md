@@ -17,7 +17,10 @@ An Indiekit plugin that adds full ActivityPub federation via [Fedify](https://fe
 index.js                          ← Plugin entry, route registration, syndicator
 ├── lib/federation-setup.js       ← Fedify Federation instance, dispatchers, collections
 ├── lib/federation-bridge.js      ← Express ↔ Fedify request/response bridge
-├── lib/inbox-listeners.js        ← Handlers for Follow, Undo, Like, Announce, Create, Delete, etc.
+├── lib/inbox-listeners.js        ← Fedify inbox listener registration + reply forwarding
+├── lib/inbox-handlers.js         ← Async inbox activity handlers (Create, Like, Announce, etc.)
+├── lib/inbox-queue.js            ← Persistent MongoDB-backed async inbox processing queue
+├── lib/outbox-failure.js         ← Outbox delivery failure handling (410 cleanup, 404 strikes, strike reset)
 ├── lib/jf2-to-as2.js             ← JF2 → ActivityStreams conversion (plain JSON + Fedify vocab)
 ├── lib/kv-store.js               ← MongoDB-backed KvStore for Fedify (get/set/delete/list)
 ├── lib/activity-log.js           ← Activity logging to ap_activities
@@ -25,13 +28,26 @@ index.js                          ← Plugin entry, route registration, syndicat
 ├── lib/timeline-store.js         ← Timeline item extraction + sanitization
 ├── lib/timeline-cleanup.js       ← Retention-based timeline pruning
 ├── lib/og-unfurl.js              ← Open Graph link previews + quote enrichment
+├── lib/key-refresh.js            ← Remote actor key freshness tracking (skip redundant re-fetches)
+├── lib/redis-cache.js            ← Redis-cached actor lookups (cachedQuery wrapper)
+├── lib/lookup-helpers.js         ← WebFinger/actor resolution utilities
+├── lib/lookup-cache.js           ← In-memory LRU cache for actor lookups
+├── lib/resolve-author.js         ← Author resolution with fallback chain
+├── lib/content-utils.js          ← Content sanitization and text processing
+├── lib/emoji-utils.js            ← Custom emoji detection and rendering
+├── lib/fedidb.js                 ← FediDB integration for popular accounts
 ├── lib/batch-refollow.js         ← Gradual re-follow for imported Mastodon accounts
 ├── lib/migration.js              ← CSV parsing + WebFinger resolution for Mastodon import
 ├── lib/csrf.js                   ← CSRF token generation/validation
+├── lib/migrations/
+│   └── separate-mentions.js      ← Data migration: split mentions from notifications
 ├── lib/storage/
 │   ├── timeline.js               ← Timeline CRUD with cursor pagination
 │   ├── notifications.js          ← Notification CRUD with read/unread tracking
-│   └── moderation.js             ← Mute/block storage
+│   ├── moderation.js             ← Mute/block storage
+│   ├── server-blocks.js          ← Server-level domain blocking
+│   ├── followed-tags.js          ← Hashtag follow/unfollow storage
+│   └── messages.js               ← Direct message storage
 ├── lib/controllers/              ← Express route handlers (admin UI)
 │   ├── dashboard.js, reader.js, compose.js, profile.js, profile.remote.js
 │   ├── public-profile.js         ← Public profile page (HTML fallback for actor URL)
@@ -44,6 +60,15 @@ index.js                          ← Plugin entry, route registration, syndicat
 │   ├── featured.js, featured-tags.js
 │   ├── interactions.js, interactions-like.js, interactions-boost.js
 │   ├── moderation.js, migrate.js, refollow.js
+│   ├── messages.js               ← Direct message UI
+│   ├── follow-requests.js        ← Manual follow approval UI
+│   ├── follow-tag.js             ← Hashtag follow/unfollow actions
+│   ├── tabs.js                   ← Explore tab management
+│   ├── my-profile.js             ← Self-profile view
+│   ├── resolve.js                ← Actor/post resolution endpoint
+│   ├── authorize-interaction.js  ← Remote interaction authorization
+│   ├── federation-mgmt.js        ← Federation management (server blocks)
+│   └── federation-delete.js      ← Account deletion / federation cleanup
 ├── views/                        ← Nunjucks templates
 │   ├── activitypub-*.njk         ← Page templates
 │   ├── layouts/ap-reader.njk     ← Reader layout (NOT reader.njk — see gotcha below)
@@ -60,7 +85,9 @@ index.js                          ← Plugin entry, route registration, syndicat
 
 ```
 Outbound: Indiekit post → syndicator.syndicate() → jf2ToAS2Activity() → ctx.sendActivity() → follower inboxes
-Inbound:  Remote inbox POST → Fedify → inbox-listeners.js → MongoDB collections → admin UI
+          Delivery failure → outbox-failure.js → 410: full cleanup | 404: strike system → eventual cleanup
+Inbound:  Remote inbox POST → Fedify → inbox-listeners.js → ap_inbox_queue → inbox-handlers.js → MongoDB
+          Reply forwarding: inbox-listeners.js checks if reply is to our post → ctx.forwardActivity() → follower inboxes
 Reader:   Followed account posts → Create inbox → timeline-store → ap_timeline → reader UI
 Explore:  Public Mastodon API → fetchMastodonTimeline() → mapMastodonToItem() → explore UI
 
@@ -73,7 +100,7 @@ processing pipeline via item-processing.js:
 
 | Collection | Purpose | Key fields |
 |---|---|---|
-| `ap_followers` | Accounts following us | `actorUrl` (unique), `inbox`, `sharedInbox`, `source` |
+| `ap_followers` | Accounts following us | `actorUrl` (unique), `inbox`, `sharedInbox`, `source`, `deliveryFailures`, `firstFailureAt`, `lastFailureAt` |
 | `ap_following` | Accounts we follow | `actorUrl` (unique), `source`, `acceptedAt` |
 | `ap_activities` | Activity log (TTL-indexed) | `direction`, `type`, `actorUrl`, `objectUrl`, `receivedAt` |
 | `ap_keys` | Cryptographic key pairs | `type` ("rsa" or "ed25519"), key material |
@@ -81,11 +108,19 @@ processing pipeline via item-processing.js:
 | `ap_profile` | Actor profile (single doc) | `name`, `summary`, `icon`, `attachments`, `actorType` |
 | `ap_featured` | Pinned posts | `postUrl`, `pinnedAt` |
 | `ap_featured_tags` | Featured hashtags | `tag`, `addedAt` |
-| `ap_timeline` | Reader timeline items | `uid` (unique), `published`, `author`, `content` |
+| `ap_timeline` | Reader timeline items | `uid` (unique), `published`, `author`, `content`, `visibility`, `isContext` |
 | `ap_notifications` | Likes, boosts, follows, mentions | `uid` (unique), `type`, `read` |
 | `ap_muted` | Muted actors/keywords | `url` or `keyword` |
 | `ap_blocked` | Blocked actors | `url` |
 | `ap_interactions` | Like/boost tracking per post | `objectUrl`, `type` |
+| `ap_messages` | Direct messages | `uid` (unique), `conversationId`, `author`, `content` |
+| `ap_followed_tags` | Hashtags we follow | `tag` (unique) |
+| `ap_explore_tabs` | Saved explore instances | `instance` (unique), `label` |
+| `ap_reports` | Outbound Flag activities | `actorUrl`, `reportedAt` |
+| `ap_pending_follows` | Follow requests awaiting approval | `actorUrl` (unique), `receivedAt` |
+| `ap_blocked_servers` | Blocked server domains | `domain` (unique) |
+| `ap_key_freshness` | Remote actor key verification timestamps | `actorUrl` (unique), `lastVerifiedAt` |
+| `ap_inbox_queue` | Persistent async inbox queue | `activityId`, `status`, `enqueuedAt` |
 
 ## Critical Patterns and Gotchas
 
@@ -281,6 +316,40 @@ Posts that quote another post (Mastodon quote feature via FEP-044f) are rendered
 3. **On-demand:** `post-detail.js` fetches quotes on demand for items that have `quoteUrl` but no stored `quote` data (pre-existing items)
 4. **Rendering:** `partials/ap-quote-embed.njk` renders the embedded card; `stripQuoteReferences()` removes the inline `RE: <link>` paragraph to avoid duplication
 
+### 26. Async Inbox Processing (v2.14.0+)
+
+Inbound activities follow a two-stage pattern: `inbox-listeners.js` receives activities from Fedify, persists them to `ap_inbox_queue`, then `inbox-handlers.js` processes them asynchronously. This ensures no data loss if the server crashes mid-processing. Reply forwarding (`ctx.forwardActivity()`) happens synchronously in `inbox-listeners.js` because `forwardActivity()` is only available on `InboxContext`, not the base `Context` used by the queue processor.
+
+### 27. Outbox Delivery Failure Handling (v2.15.0+)
+
+`lib/outbox-failure.js` handles permanent delivery failures reported by Fedify's `setOutboxPermanentFailureHandler`:
+
+- **410 Gone** → Immediate full cleanup: deletes follower from `ap_followers`, their items from `ap_timeline` (by `author.url`), their notifications from `ap_notifications` (by `actorUrl`)
+- **404 Not Found** → Strike system: increments `deliveryFailures` on the follower doc, sets `firstFailureAt` via `$setOnInsert`. After 3 strikes over 7+ days, triggers the same full cleanup as 410
+- **Strike reset** → `resetDeliveryStrikes()` is called in `inbox-listeners.js` after `touchKeyFreshness()` for every inbound activity type (except Block). If an actor is sending us activities, they're alive — `$unset` the strike fields
+
+### 28. Reply Chain Fetching and Reply Forwarding (v2.15.0+)
+
+- `fetchReplyChain()` in `inbox-handlers.js`: When a reply arrives, recursively fetches parent posts up to 5 levels deep using `object.getReplyTarget()`. Ancestors are stored with `isContext: true` flag. Uses `$setOnInsert` upsert so re-fetching ancestors is a no-op.
+- Reply forwarding in `inbox-listeners.js`: When a Create activity is a reply to one of our posts (checked via `inReplyTo.startsWith(publicationUrl)`) and is addressed to the public collection, calls `ctx.forwardActivity()` to re-deliver the reply to our followers' inboxes.
+
+### 29. Write-Time Visibility Classification (v2.15.0+)
+
+`computeVisibility(object)` in `inbox-handlers.js` classifies posts at ingest time based on `to`/`cc` fields:
+- `to` includes `https://www.w3.org/ns/activitystreams#Public` → `"public"`
+- `cc` includes Public → `"unlisted"`
+- Neither → `"private"` or `"direct"` (based on whether followers collection is in `to`)
+
+The `visibility` field is stored on `ap_timeline` documents for future filtering.
+
+### 30. Server Blocking (v2.14.0+)
+
+`lib/storage/server-blocks.js` manages domain-level blocks stored in `ap_blocked_servers`. When a server is blocked, all inbound activities from that domain are rejected in `inbox-listeners.js` before any processing occurs. The `federation-mgmt.js` controller provides the admin UI.
+
+### 31. Key Freshness Tracking (v2.14.0+)
+
+`lib/key-refresh.js` tracks when remote actor keys were last verified in `ap_key_freshness`. `touchKeyFreshness()` is called for every inbound activity. This allows skipping redundant key re-fetches for actors we've recently verified, reducing network round-trips.
+
 ## Date Handling Convention
 
 **All dates MUST be stored as ISO 8601 strings.** This is mandatory across all Indiekit plugins.
@@ -348,6 +417,10 @@ On restart, `refollow:pending` entries are reset to `import` to prevent stale cl
 | `GET` | `{mount}/admin/reader/profile` | Remote profile view | Yes |
 | `GET` | `{mount}/admin/reader/moderation` | Moderation dashboard | Yes |
 | `POST` | `{mount}/admin/reader/mute,unmute,block,unblock` | Moderation actions | Yes |
+| `GET/POST` | `{mount}/admin/reader/messages` | Direct messages | Yes |
+| `GET/POST` | `{mount}/admin/follow-requests` | Manual follow approval | Yes |
+| `POST` | `{mount}/admin/reader/follow-tag,unfollow-tag` | Follow/unfollow hashtag | Yes |
+| `GET/POST` | `{mount}/admin/federation` | Server blocking management | Yes |
 | `GET` | `{mount}/admin/followers,following,activities` | Lists | Yes |
 | `GET/POST` | `{mount}/admin/profile` | Actor profile editor | Yes |
 | `GET/POST` | `{mount}/admin/featured` | Pinned posts | Yes |

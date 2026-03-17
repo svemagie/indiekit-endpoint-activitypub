@@ -12,6 +12,28 @@ ActivityPub federation endpoint for [Indiekit](https://getindiekit.com), built o
 - Reply delivery — replies are addressed to and delivered directly to the original post's author
 - Shared inbox support with collection sync (FEP-8fcf)
 - Configurable actor type (Person, Service, Organization, Group)
+- Manual follow approval — review and accept/reject follow requests before they take effect
+- Direct messages — private conversations stored separately from the public timeline
+
+**Federation Resilience** *(v2.14.0+)*
+- Async inbox queue — inbound activities are persisted to MongoDB before processing, ensuring no data loss on crashes
+- Server blocking — block entire remote servers by domain, rejecting all inbound activities from blocked instances
+- Key freshness tracking — tracks when remote actor keys were last verified, skipping redundant re-fetches
+- Redis-cached actor lookups — caches actor resolution results to reduce network round-trips
+- Delivery strike tracking on `ap_followers` — counts consecutive delivery failures per follower
+- FEP-fe34 security — verifies `proof.created` timestamps to reject replayed activities
+
+**Outbox Failure Handling** *(v2.15.0+, inspired by [Hollo](https://github.com/fedify-dev/hollo))*
+- **410 Gone** — immediate full cleanup: removes the follower, their timeline items, and their notifications
+- **404 Not Found** — strike system: 3 consecutive failures over 7+ days triggers the same full cleanup
+- Strike auto-reset — when an actor sends us any activity, their delivery failure count resets to zero
+- Prevents orphaned data from accumulating over time while tolerating temporary server outages
+
+**Reply Intelligence** *(v2.15.0+, inspired by [Hollo](https://github.com/fedify-dev/hollo))*
+- Recursive reply chain fetching — when a reply arrives, fetches parent posts up to 5 levels deep for thread context
+- Ancestor posts stored with `isContext: true` flag for thread view without cluttering the main timeline
+- Reply forwarding to followers — when someone replies to our posts, the reply is forwarded to our followers so they see the full conversation
+- Write-time visibility classification — computes `public`/`unlisted`/`private`/`direct` from `to`/`cc` fields at ingest time
 
 **Reader**
 - Timeline view showing posts from followed accounts with tab filtering (notes, articles, replies, boosts, media)
@@ -36,6 +58,8 @@ ActivityPub federation endpoint for [Indiekit](https://getindiekit.com), built o
 **Moderation**
 - Mute actors or keywords
 - Block actors (also removes from followers)
+- Block entire servers by domain
+- Report remote actors to their home instance (Flag activity)
 - All moderation actions available from the reader UI
 
 **Mastodon Migration**
@@ -186,6 +210,7 @@ When remote servers send activities to your inbox:
 - **Accept(Follow)** → Marks our follow as accepted
 - **Reject(Follow)** → Marks our follow as rejected
 - **Block** → Removes actor from our followers
+- **Flag** → Outbound report sent to remote actor's instance
 
 ### Content Negotiation
 
@@ -254,7 +279,7 @@ The plugin creates these collections automatically:
 
 | Collection | Description |
 |---|---|
-| `ap_followers` | Accounts following your actor |
+| `ap_followers` | Accounts following your actor (includes delivery failure strike tracking) |
 | `ap_following` | Accounts you follow |
 | `ap_activities` | Activity log with automatic TTL cleanup |
 | `ap_keys` | RSA and Ed25519 key pairs for HTTP Signatures |
@@ -262,11 +287,19 @@ The plugin creates these collections automatically:
 | `ap_profile` | Actor profile (single document) |
 | `ap_featured` | Pinned/featured posts |
 | `ap_featured_tags` | Featured hashtags |
-| `ap_timeline` | Reader timeline items from followed accounts |
+| `ap_timeline` | Reader timeline items (includes `visibility` and `isContext` fields) |
 | `ap_notifications` | Interaction notifications |
 | `ap_muted` | Muted actors and keywords |
 | `ap_blocked` | Blocked actors |
 | `ap_interactions` | Per-post like/boost tracking |
+| `ap_messages` | Direct messages / private conversations |
+| `ap_followed_tags` | Hashtags you follow for timeline filtering |
+| `ap_explore_tabs` | Saved Mastodon instances for the explore view |
+| `ap_reports` | Outbound reports (Flag activities) sent to remote instances |
+| `ap_pending_follows` | Follow requests awaiting manual approval |
+| `ap_blocked_servers` | Blocked server domains (instance-level blocks) |
+| `ap_key_freshness` | Tracks when remote actor keys were last verified |
+| `ap_inbox_queue` | Persistent async inbox processing queue |
 
 ## Supported Post Types
 
@@ -345,6 +378,16 @@ This is not a bug — Fedify requires explicit opt-in for signed fetches. But it
 - **No image upload in reader** — Compose form is text-only
 - **No custom emoji rendering** — Custom emoji shortcodes display as text
 - **In-process queue without Redis** — Activities may be lost on restart
+
+## Acknowledgements
+
+This plugin builds on the excellent [Fedify](https://fedify.dev) framework by [Hong Minhee](https://github.com/dahlia). Fedify provides the core ActivityPub federation layer — HTTP Signatures, content negotiation, message queues, and the vocabulary types that make all of this possible.
+
+Several federation patterns in this plugin were inspired by studying other open-source ActivityPub implementations:
+
+- **[Hollo](https://github.com/fedify-dev/hollo)** (by the Fedify author) — A single-user Fedify-based ActivityPub server that served as the primary reference implementation. The outbox permanent failure handling (410 cleanup and 404 strike system), recursive reply chain fetching, reply forwarding to followers, and write-time visibility classification in v2.15.0 are all adapted from Hollo's patterns for a MongoDB/single-user context.
+
+- **[Wafrn](https://github.com/gabboman/wafrn)** — A federated social network whose ActivityPub implementation informed the operational resilience patterns added in v2.14.0. Server blocking, key freshness tracking, async inbox processing with persistent queues, and the general approach to federation hardening were inspired by studying Wafrn's production codebase.
 
 ## License
 
