@@ -65,6 +65,9 @@
         </time>
         {% if item.updated %}<span class="ap-card__edited" title="{{ item.updated | date('PPp') }}">✏️</span>{% endif %}
       </a>
+      {% if item.visibility and item.visibility != "public" %}
+        <span class="ap-card__visibility ap-card__visibility--{{ item.visibility }}" title="{% if item.visibility == 'unlisted' %}{{ __('activitypub.reader.compose.visibilityUnlisted') }}{% elif item.visibility == 'private' %}{{ __('activitypub.reader.compose.visibilityFollowers') }}{% elif item.visibility == 'direct' %}DM{% endif %}">{% if item.visibility == "unlisted" %}🔓{% elif item.visibility == "private" %}🔒{% elif item.visibility == "direct" %}✉️{% endif %}</span>
+      {% endif %}
     {% endif %}
   </header>
 
