@@ -6,19 +6,67 @@
 {% from "pagination/macro.njk" import pagination with context %}
 
 {% block content %}
-  {% if followers.length > 0 %}
-    {% for follower in followers %}
-      {{ card({
-        title: follower.name or follower.handle or follower.actorUrl,
-        url: follower.actorUrl,
-        photo: { url: follower.avatar, alt: follower.name } if follower.avatar,
-        description: { text: "@" + follower.handle if follower.handle },
-        published: follower.followedAt
-      }) }}
-    {% endfor %}
+  {# Tab navigation — only show if there are pending requests #}
+  {% if pendingCount > 0 %}
+    {% set followersBase = mountPath + "/admin/followers" %}
+    <nav class="ap-tabs">
+      <a href="{{ followersBase }}" class="ap-tab{% if tab == 'followers' %} ap-tab--active{% endif %}">
+        {{ __("activitypub.followers") }}
+        {% if followerCount %}<span class="ap-tab__count">{{ followerCount }}</span>{% endif %}
+      </a>
+      <a href="{{ followersBase }}?tab=pending" class="ap-tab{% if tab == 'pending' %} ap-tab--active{% endif %}">
+        {{ __("activitypub.pendingFollows") }}
+        <span class="ap-tab__count">{{ pendingCount }}</span>
+      </a>
+    </nav>
+  {% endif %}
 
-    {{ pagination(cursor) if cursor }}
+  {% if tab == "pending" %}
+    {# Pending follow requests #}
+    {% if pendingFollows.length > 0 %}
+      {% for pending in pendingFollows %}
+        <div class="ap-follow-request">
+          {{ card({
+            title: pending.name or pending.handle or pending.actorUrl,
+            url: pending.actorUrl,
+            photo: { url: pending.avatar, alt: pending.name } if pending.avatar,
+            description: { text: "@" + pending.handle if pending.handle }
+          }) }}
+          <div class="ap-follow-request__actions">
+            <form method="post" action="{{ mountPath }}/admin/followers/approve" class="ap-follow-request__form">
+              <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+              <input type="hidden" name="actorUrl" value="{{ pending.actorUrl }}">
+              <button type="submit" class="button">{{ __("activitypub.approve") }}</button>
+            </form>
+            <form method="post" action="{{ mountPath }}/admin/followers/reject" class="ap-follow-request__form">
+              <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+              <input type="hidden" name="actorUrl" value="{{ pending.actorUrl }}">
+              <button type="submit" class="button button--danger">{{ __("activitypub.reject") }}</button>
+            </form>
+          </div>
+        </div>
+      {% endfor %}
+
+      {{ pagination(cursor) if cursor }}
+    {% else %}
+      {{ prose({ text: __("activitypub.noPendingFollows") }) }}
+    {% endif %}
   {% else %}
-    {{ prose({ text: __("activitypub.noFollowers") }) }}
+    {# Accepted followers #}
+    {% if followers.length > 0 %}
+      {% for follower in followers %}
+        {{ card({
+          title: follower.name or follower.handle or follower.actorUrl,
+          url: follower.actorUrl,
+          photo: { url: follower.avatar, alt: follower.name } if follower.avatar,
+          description: { text: "@" + follower.handle if follower.handle },
+          published: follower.followedAt
+        }) }}
+      {% endfor %}
+
+      {{ pagination(cursor) if cursor }}
+    {% else %}
+      {{ prose({ text: __("activitypub.noFollowers") }) }}
+    {% endif %}
   {% endif %}
 {% endblock %}

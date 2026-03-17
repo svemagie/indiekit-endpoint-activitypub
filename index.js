@@ -2,6 +2,7 @@ import express from "express";
 
 import { setupFederation, buildPersonActor } from "./lib/federation-setup.js";
 import { initRedisCache } from "./lib/redis-cache.js";
+import { lookupWithSecurity } from "./lib/lookup-helpers.js";
 import {
   createFedifyMiddleware,
 } from "./lib/federation-bridge.js";
@@ -39,6 +40,10 @@ import {
   filterModeController,
 } from "./lib/controllers/moderation.js";
 import { followersController } from "./lib/controllers/followers.js";
+import {
+  approveFollowController,
+  rejectFollowController,
+} from "./lib/controllers/follow-requests.js";
 import { followingController } from "./lib/controllers/following.js";
 import { activitiesController } from "./lib/controllers/activities.js";
 import {
@@ -304,6 +309,8 @@ export default class ActivityPubEndpoint {
     router.post("/admin/reader/block", blockController(mp, this));
     router.post("/admin/reader/unblock", unblockController(mp, this));
     router.get("/admin/followers", followersController(mp));
+    router.post("/admin/followers/approve", approveFollowController(mp, this));
+    router.post("/admin/followers/reject", rejectFollowController(mp, this));
     router.get("/admin/following", followingController(mp));
     router.get("/admin/activities", activitiesController(mp));
     router.get("/admin/featured", featuredGetController(mp));
@@ -493,7 +500,7 @@ export default class ActivityPubEndpoint {
           let replyToActor = null;
           if (properties["in-reply-to"]) {
             try {
-              const remoteObject = await ctx.lookupObject(
+              const remoteObject = await lookupWithSecurity(ctx,
                 new URL(properties["in-reply-to"]),
               );
               if (remoteObject && typeof remoteObject.getAttributedTo === "function") {
@@ -525,7 +532,7 @@ export default class ActivityPubEndpoint {
 
           for (const { handle } of mentionHandles) {
             try {
-              const mentionedActor = await ctx.lookupObject(
+              const mentionedActor = await lookupWithSecurity(ctx,
                 new URL(`acct:${handle}`),
               );
               if (mentionedActor?.id) {
@@ -701,7 +708,7 @@ export default class ActivityPubEndpoint {
       const documentLoader = await ctx.getDocumentLoader({
         identifier: handle,
       });
-      const remoteActor = await ctx.lookupObject(actorUrl, {
+      const remoteActor = await lookupWithSecurity(ctx,actorUrl, {
         documentLoader,
       });
       if (!remoteActor) {
@@ -802,7 +809,7 @@ export default class ActivityPubEndpoint {
       const documentLoader = await ctx.getDocumentLoader({
         identifier: handle,
       });
-      const remoteActor = await ctx.lookupObject(actorUrl, {
+      const remoteActor = await lookupWithSecurity(ctx,actorUrl, {
         documentLoader,
       });
       if (!remoteActor) {
@@ -1115,6 +1122,8 @@ export default class ActivityPubEndpoint {
     Indiekit.addCollection("ap_explore_tabs");
     // Reports collection
     Indiekit.addCollection("ap_reports");
+    // Pending follow requests (manual approval)
+    Indiekit.addCollection("ap_pending_follows");
 
     // Store collection references (posts resolved lazily)
     const indiekitCollections = Indiekit.collections;
@@ -1140,6 +1149,8 @@ export default class ActivityPubEndpoint {
       ap_explore_tabs: indiekitCollections.get("ap_explore_tabs"),
       // Reports collection
       ap_reports: indiekitCollections.get("ap_reports"),
+      // Pending follow requests (manual approval)
+      ap_pending_follows: indiekitCollections.get("ap_pending_follows"),
       get posts() {
         return indiekitCollections.get("posts");
       },
@@ -1331,6 +1342,15 @@ export default class ActivityPubEndpoint {
         { reportedUrls: 1 },
         { background: true },
       );
+      // Pending follow requests — unique on actorUrl
+      this._collections.ap_pending_follows.createIndex(
+        { actorUrl: 1 },
+        { unique: true, background: true },
+      );
+      this._collections.ap_pending_follows.createIndex(
+        { requestedAt: -1 },
+        { background: true },
+      );
     } catch {
       // Index creation failed — collections not yet available.
       // Indexes already exist from previous startups; non-fatal.
@@ -1375,7 +1395,7 @@ export default class ActivityPubEndpoint {
         const documentLoader = await ctx.getDocumentLoader({
           identifier: handle,
         });
-        const actor = await ctx.lookupObject(new URL(actorUrl), {
+        const actor = await lookupWithSecurity(ctx,new URL(actorUrl), {
           documentLoader,
         });
         if (!actor) return "";

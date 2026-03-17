@@ -3408,3 +3408,28 @@
   }
 }
 
+/* Follow request approve/reject actions */
+.ap-follow-request {
+  margin-block-end: var(--space-m);
+}
+
+.ap-follow-request__actions {
+  display: flex;
+  gap: var(--space-s);
+  margin-block-start: var(--space-xs);
+  padding-inline-start: var(--space-l);
+}
+
+.ap-follow-request__form {
+  display: inline;
+}
+
+.button--danger {
+  background-color: var(--color-red45);
+  color: white;
+}
+
+.button--danger:hover {
+  background-color: var(--color-red35, #c0392b);
+}
+
