@@ -26,6 +26,38 @@
     </div>
   </section>
 
+  {# Blocked servers #}
+  <section class="ap-moderation__section">
+    <h2>Blocked Servers</h2>
+    <p class="ap-moderation__hint">Block entire instances by hostname. Activities from blocked servers are rejected before any processing.</p>
+    {% if blockedServers and blockedServers.length > 0 %}
+      <ul class="ap-moderation__list" x-ref="serverList">
+        {% for entry in blockedServers %}
+          <li class="ap-moderation__entry" data-hostname="{{ entry.hostname }}">
+            <code>{{ entry.hostname }}</code>
+            {% if entry.reason %}<span class="ap-moderation__reason">({{ entry.reason }})</span>{% endif %}
+            <button class="ap-moderation__remove"
+              @click="removeEntry($el, 'unblock-server', { hostname: $el.closest('li').dataset.hostname })">
+              Unblock
+            </button>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="ap-moderation__empty" x-ref="serverEmpty">No servers blocked.</p>
+    {% endif %}
+
+    <form class="ap-moderation__add-form" @submit.prevent="addBlockedServer()">
+      <input type="text" x-model="newServerHostname"
+        placeholder="spam.instance.social"
+        class="ap-moderation__input"
+        x-ref="serverInput">
+      <button type="submit" :disabled="submitting" class="ap-moderation__add-btn">
+        Block Server
+      </button>
+    </form>
+  </section>
+
   {# Blocked actors #}
   <section class="ap-moderation__section">
     <h2>{{ __("activitypub.moderation.blockedTitle") }}</h2>
@@ -108,6 +140,7 @@
     document.addEventListener('alpine:init', () => {
       Alpine.data('moderationPage', () => ({
         newKeyword: '',
+        newServerHostname: '',
         submitting: false,
         error: '',
 
@@ -150,6 +183,50 @@
               this.$refs.keywordInput.focus();
             } else {
               this.error = data.error || 'Failed to add keyword';
+            }
+          } catch (e) {
+            this.error = 'Request failed';
+          }
+          this.submitting = false;
+        },
+
+        async addBlockedServer() {
+          const hostname = this.newServerHostname.trim();
+          if (!hostname) return;
+          this.submitting = true;
+          this.error = '';
+          try {
+            const res = await fetch(this.mountPath + '/admin/reader/block-server', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': this.csrfToken,
+              },
+              body: JSON.stringify({ hostname }),
+            });
+            const data = await res.json();
+            if (data.success) {
+              const list = this.$refs.serverList;
+              if (list) {
+                const li = document.createElement('li');
+                li.className = 'ap-moderation__entry';
+                li.dataset.hostname = hostname;
+                const code = document.createElement('code');
+                code.textContent = hostname;
+                const btn = document.createElement('button');
+                btn.className = 'ap-moderation__remove';
+                btn.textContent = 'Unblock';
+                btn.addEventListener('click', () => {
+                  this.removeEntry(btn, 'unblock-server', { hostname });
+                });
+                li.append(code, btn);
+                list.appendChild(li);
+              }
+              if (this.$refs.serverEmpty) this.$refs.serverEmpty.remove();
+              this.newServerHostname = '';
+              this.$refs.serverInput.focus();
+            } else {
+              this.error = data.error || 'Failed to block server';
             }
           } catch (e) {
             this.error = 'Request failed';
