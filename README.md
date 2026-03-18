@@ -329,11 +329,13 @@ The JF2-to-ActivityStreams converter handles these Indiekit post types:
 |---|---|
 | note, reply, bookmark, jam, rsvp, checkin | `Create(Note)` |
 | article | `Create(Article)` |
-| like | `Like` |
-| repost | `Announce` |
+| like | `Like` | `to: Public, cc: followers` for shared inbox routing |
+| repost | `Announce` | `to: Public, cc: followers` for shared inbox routing |
 | photo, video, audio | Attachments on Note/Article |
 
-Categories are converted to `Hashtag` tags. Bookmarks include a bookmark emoji and link.
+Categories are converted to `Hashtag` tags (nested paths like `on/art/music` are normalized to the last segment: `#music`). Bookmarks include a bookmark emoji and link.
+
+**Addressing:** Like and Announce activities include `to: as:Public` and `cc: followers_collection`. This is required for Mastodon shared inbox routing — without `cc: followers`, activities are accepted (HTTP 202) but silently dropped by remote instances.
 
 ## Fedify Workarounds and Implementation Notes
 
