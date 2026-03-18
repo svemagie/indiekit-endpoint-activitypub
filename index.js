@@ -1,6 +1,7 @@
 import express from "express";
 
 import { setupFederation, buildPersonActor } from "./lib/federation-setup.js";
+import { createMastodonRouter } from "./lib/mastodon/router.js";
 import { initRedisCache } from "./lib/redis-cache.js";
 import { lookupWithSecurity } from "./lib/lookup-helpers.js";
 import {
@@ -1137,6 +1138,10 @@ export default class ActivityPubEndpoint {
     Indiekit.addCollection("ap_key_freshness");
     // Async inbox processing queue
     Indiekit.addCollection("ap_inbox_queue");
+    // Mastodon Client API collections
+    Indiekit.addCollection("ap_oauth_apps");
+    Indiekit.addCollection("ap_oauth_tokens");
+    Indiekit.addCollection("ap_markers");
 
     // Store collection references (posts resolved lazily)
     const indiekitCollections = Indiekit.collections;
@@ -1170,6 +1175,10 @@ export default class ActivityPubEndpoint {
       ap_key_freshness: indiekitCollections.get("ap_key_freshness"),
       // Async inbox processing queue
       ap_inbox_queue: indiekitCollections.get("ap_inbox_queue"),
+      // Mastodon Client API collections
+      ap_oauth_apps: indiekitCollections.get("ap_oauth_apps"),
+      ap_oauth_tokens: indiekitCollections.get("ap_oauth_tokens"),
+      ap_markers: indiekitCollections.get("ap_markers"),
       get posts() {
         return indiekitCollections.get("posts");
       },
@@ -1391,6 +1400,24 @@ export default class ActivityPubEndpoint {
         { processedAt: 1 },
         { expireAfterSeconds: 86_400, background: true },
       );
+
+      // Mastodon Client API indexes
+      this._collections.ap_oauth_apps.createIndex(
+        { clientId: 1 },
+        { unique: true, background: true },
+      );
+      this._collections.ap_oauth_tokens.createIndex(
+        { accessToken: 1 },
+        { unique: true, background: true },
+      );
+      this._collections.ap_oauth_tokens.createIndex(
+        { code: 1 },
+        { unique: true, sparse: true, background: true },
+      );
+      this._collections.ap_markers.createIndex(
+        { userId: 1, timeline: 1 },
+        { unique: true, background: true },
+      );
     } catch {
       // Index creation failed — collections not yet available.
       // Indexes already exist from previous startups; non-fatal.
@@ -1455,6 +1482,26 @@ export default class ActivityPubEndpoint {
       name: "ActivityPub content negotiation",
       mountPath: "/",
       routesPublic: this.contentNegotiationRoutes,
+    });
+
+    // Mastodon Client API — virtual endpoint at root
+    // Mastodon-compatible clients (Phanpy, Elk, etc.) expect /api/v1/*,
+    // /api/v2/*, /oauth/* at the domain root, not under /activitypub.
+    const pluginRef = this;
+    const mastodonRouter = createMastodonRouter({
+      collections: this._collections,
+      pluginOptions: {
+        handle: this.options.actor?.handle || "user",
+        publicationUrl: this._publicationUrl,
+        federation: this._federation,
+        followActor: (url, info) => pluginRef.followActor(url, info),
+        unfollowActor: (url) => pluginRef.unfollowActor(url),
+      },
+    });
+    Indiekit.addEndpoint({
+      name: "Mastodon Client API",
+      mountPath: "/",
+      routesPublic: mastodonRouter,
     });
 
     // Register syndicator (appears in post editing UI)
