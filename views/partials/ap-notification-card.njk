@@ -15,7 +15,7 @@
     {% endif %}
     <span class="ap-notification__avatar ap-notification__avatar--default" aria-hidden="true">{{ item.actorName[0] | upper if item.actorName else "?" }}</span>
     <span class="ap-notification__type-badge">
-      {% if item.type == "like" %}❤{% elif item.type == "boost" %}🔁{% elif item.type == "follow" %}👤{% elif item.type == "reply" %}💬{% elif item.type == "mention" %}{% if item.isDirect %}🔒{% else %}@{% endif %}{% elif item.type == "dm" %}✉{% elif item.type == "report" %}⚑{% endif %}
+      {% if item.type == "like" %}❤{% elif item.type == "boost" %}🔁{% elif item.type == "follow" or item.type == "follow_request" %}👤{% elif item.type == "reply" %}💬{% elif item.type == "mention" %}{% if item.isDirect %}🔒{% else %}@{% endif %}{% elif item.type == "dm" %}✉{% elif item.type == "report" %}⚑{% endif %}
     </span>
   </div>
 
@@ -32,6 +32,8 @@
         {{ __("activitypub.notifications.boostedPost") }}
       {% elif item.type == "follow" %}
         {{ __("activitypub.notifications.followedYou") }}
+      {% elif item.type == "follow_request" %}
+        {{ __("activitypub.followRequest") }}
       {% elif item.type == "reply" %}
         {{ __("activitypub.notifications.repliedTo") }}
       {% elif item.type == "mention" %}

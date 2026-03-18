@@ -2,6 +2,7 @@ import express from "express";
 
 import { setupFederation, buildPersonActor } from "./lib/federation-setup.js";
 import { initRedisCache } from "./lib/redis-cache.js";
+import { lookupWithSecurity } from "./lib/lookup-helpers.js";
 import {
   createFedifyMiddleware,
 } from "./lib/federation-bridge.js";
@@ -35,10 +36,16 @@ import {
   unmuteController,
   blockController,
   unblockController,
+  blockServerController,
+  unblockServerController,
   moderationController,
   filterModeController,
 } from "./lib/controllers/moderation.js";
 import { followersController } from "./lib/controllers/followers.js";
+import {
+  approveFollowController,
+  rejectFollowController,
+} from "./lib/controllers/follow-requests.js";
 import { followingController } from "./lib/controllers/following.js";
 import { activitiesController } from "./lib/controllers/activities.js";
 import {
@@ -99,6 +106,9 @@ import { logActivity } from "./lib/activity-log.js";
 import { resolveAuthor } from "./lib/resolve-author.js";
 import { scheduleCleanup } from "./lib/timeline-cleanup.js";
 import { runSeparateMentionsMigration } from "./lib/migrations/separate-mentions.js";
+import { loadBlockedServersToRedis } from "./lib/storage/server-blocks.js";
+import { scheduleKeyRefresh } from "./lib/key-refresh.js";
+import { startInboxProcessor } from "./lib/inbox-queue.js";
 import { deleteFederationController } from "./lib/controllers/federation-delete.js";
 import {
   federationMgmtController,
@@ -304,7 +314,11 @@ export default class ActivityPubEndpoint {
     router.post("/admin/reader/unmute", unmuteController(mp, this));
     router.post("/admin/reader/block", blockController(mp, this));
     router.post("/admin/reader/unblock", unblockController(mp, this));
+    router.post("/admin/reader/block-server", blockServerController(mp));
+    router.post("/admin/reader/unblock-server", unblockServerController(mp));
     router.get("/admin/followers", followersController(mp));
+    router.post("/admin/followers/approve", approveFollowController(mp, this));
+    router.post("/admin/followers/reject", rejectFollowController(mp, this));
     router.get("/admin/following", followingController(mp));
     router.get("/admin/activities", activitiesController(mp));
     router.get("/admin/featured", featuredGetController(mp));
@@ -421,7 +435,7 @@ export default class ActivityPubEndpoint {
           "properties.url": requestUrl,
         });
 
-        if (!post) {
+        if (!post || post.properties?.deleted) {
           return next();
         }
 
@@ -510,7 +524,7 @@ export default class ActivityPubEndpoint {
           let replyToActor = null;
           if (properties["in-reply-to"]) {
             try {
-              const remoteObject = await ctx.lookupObject(
+              const remoteObject = await lookupWithSecurity(ctx,
                 new URL(properties["in-reply-to"]),
               );
               if (remoteObject && typeof remoteObject.getAttributedTo === "function") {
@@ -542,7 +556,7 @@ export default class ActivityPubEndpoint {
 
           for (const { handle } of mentionHandles) {
             try {
-              const mentionedActor = await ctx.lookupObject(
+              const mentionedActor = await lookupWithSecurity(ctx,
                 new URL(`acct:${handle}`),
               );
               if (mentionedActor?.id) {
@@ -718,7 +732,7 @@ export default class ActivityPubEndpoint {
       const documentLoader = await ctx.getDocumentLoader({
         identifier: handle,
       });
-      const remoteActor = await ctx.lookupObject(actorUrl, {
+      const remoteActor = await lookupWithSecurity(ctx,actorUrl, {
         documentLoader,
       });
       if (!remoteActor) {
@@ -819,7 +833,7 @@ export default class ActivityPubEndpoint {
       const documentLoader = await ctx.getDocumentLoader({
         identifier: handle,
       });
-      const remoteActor = await ctx.lookupObject(actorUrl, {
+      const remoteActor = await lookupWithSecurity(ctx,actorUrl, {
         documentLoader,
       });
       if (!remoteActor) {
@@ -1258,6 +1272,14 @@ export default class ActivityPubEndpoint {
     Indiekit.addCollection("ap_explore_tabs");
     // Reports collection
     Indiekit.addCollection("ap_reports");
+    // Pending follow requests (manual approval)
+    Indiekit.addCollection("ap_pending_follows");
+    // Server-level blocks
+    Indiekit.addCollection("ap_blocked_servers");
+    // Key freshness tracking for proactive refresh
+    Indiekit.addCollection("ap_key_freshness");
+    // Async inbox processing queue
+    Indiekit.addCollection("ap_inbox_queue");
 
     // Store collection references (posts resolved lazily)
     const indiekitCollections = Indiekit.collections;
@@ -1283,6 +1305,14 @@ export default class ActivityPubEndpoint {
       ap_explore_tabs: indiekitCollections.get("ap_explore_tabs"),
       // Reports collection
       ap_reports: indiekitCollections.get("ap_reports"),
+      // Pending follow requests (manual approval)
+      ap_pending_follows: indiekitCollections.get("ap_pending_follows"),
+      // Server-level blocks
+      ap_blocked_servers: indiekitCollections.get("ap_blocked_servers"),
+      // Key freshness tracking
+      ap_key_freshness: indiekitCollections.get("ap_key_freshness"),
+      // Async inbox processing queue
+      ap_inbox_queue: indiekitCollections.get("ap_inbox_queue"),
       get posts() {
         return indiekitCollections.get("posts");
       },
@@ -1474,6 +1504,36 @@ export default class ActivityPubEndpoint {
         { reportedUrls: 1 },
         { background: true },
       );
+      // Pending follow requests — unique on actorUrl
+      this._collections.ap_pending_follows.createIndex(
+        { actorUrl: 1 },
+        { unique: true, background: true },
+      );
+      this._collections.ap_pending_follows.createIndex(
+        { requestedAt: -1 },
+        { background: true },
+      );
+      // Server-level blocks
+      this._collections.ap_blocked_servers.createIndex(
+        { hostname: 1 },
+        { unique: true, background: true },
+      );
+      // Key freshness tracking
+      this._collections.ap_key_freshness.createIndex(
+        { actorUrl: 1 },
+        { unique: true, background: true },
+      );
+
+      // Inbox queue indexes
+      this._collections.ap_inbox_queue.createIndex(
+        { status: 1, receivedAt: 1 },
+        { background: true },
+      );
+      // TTL: auto-prune completed items after 24h
+      this._collections.ap_inbox_queue.createIndex(
+        { processedAt: 1 },
+        { expireAfterSeconds: 86_400, background: true },
+      );
     } catch {
       // Index creation failed — collections not yet available.
       // Indexes already exist from previous startups; non-fatal.
@@ -1518,7 +1578,7 @@ export default class ActivityPubEndpoint {
         const documentLoader = await ctx.getDocumentLoader({
           identifier: handle,
         });
-        const actor = await ctx.lookupObject(new URL(actorUrl), {
+        const actor = await lookupWithSecurity(ctx,new URL(actorUrl), {
           documentLoader,
         });
         if (!actor) return "";
@@ -1569,6 +1629,34 @@ export default class ActivityPubEndpoint {
     if (this.options.timelineRetention > 0) {
       scheduleCleanup(this._collections, this.options.timelineRetention);
     }
+
+    // Load server blocks into Redis for fast inbox checks
+    loadBlockedServersToRedis(this._collections).catch((error) => {
+      console.warn("[ActivityPub] Failed to load blocked servers to Redis:", error.message);
+    });
+
+    // Schedule proactive key refresh for stale follower keys (runs on startup + every 24h)
+    const keyRefreshHandle = this.options.actor.handle;
+    const keyRefreshFederation = this._federation;
+    const keyRefreshPubUrl = this._publicationUrl;
+    scheduleKeyRefresh(
+      this._collections,
+      () => keyRefreshFederation?.createContext(new URL(keyRefreshPubUrl), {
+        handle: keyRefreshHandle,
+        publicationUrl: keyRefreshPubUrl,
+      }),
+      keyRefreshHandle,
+    );
+
+    // Start async inbox queue processor (processes one item every 3s)
+    this._inboxProcessorInterval = startInboxProcessor(
+      this._collections,
+      () => this._federation?.createContext(new URL(this._publicationUrl), {
+        handle: this.options.actor.handle,
+        publicationUrl: this._publicationUrl,
+      }),
+      this.options.actor.handle,
+    );
   }
 
   /**
