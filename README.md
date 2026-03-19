@@ -362,13 +362,13 @@ The JF2-to-ActivityStreams converter handles these Indiekit post types:
 |---|---|
 | note, reply, bookmark, jam, rsvp, checkin | `Create(Note)` |
 | article | `Create(Article)` |
-| like | `Like` | `to: Public, cc: followers` for shared inbox routing |
-| repost | `Announce` | `to: Public, cc: followers` for shared inbox routing |
+| like | `Create(Note)` | Delivered as bookmark (🔖 emoji + URL) — same as bookmark handling |
+| repost | `Announce` | `to: Public` (upstream @rmdes addressing) |
 | photo, video, audio | Attachments on Note/Article |
 
-Categories are converted to `Hashtag` tags (nested paths like `on/art/music` are normalized to the last segment: `#music`). Bookmarks include a bookmark emoji and link.
+Categories are converted to `Hashtag` tags (nested paths like `on/art/music` are normalized to the last segment: `#music`). Bookmarks and likes include a bookmark emoji and link, plus a `#bookmark` hashtag.
 
-**Addressing:** Like and Announce activities include `to: as:Public` and `cc: followers_collection`. This is required for Mastodon shared inbox routing — without `cc: followers`, activities are accepted (HTTP 202) but silently dropped by remote instances.
+**OG images:** Both plain JSON-LD and Fedify Note/Article objects include an `image` property with the per-post OG image URL (derived from the post URL pattern: `/og/{year}-{month}-{day}-{slug}.png`). This enables rich preview cards on Mastodon and other fediverse clients.
 
 ## Fedify Workarounds and Implementation Notes
 
