@@ -583,7 +583,7 @@ export default class ActivityPubEndpoint {
             }
           }
 
-          const activity = jf2ToAS2Activity(
+          const activity = await jf2ToAS2Activity(
             properties,
             actorUrl,
             self._publicationUrl,
