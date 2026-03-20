@@ -224,6 +224,14 @@ export default class ActivityPubEndpoint {
       // Skip Fedify for admin UI routes — they're handled by the
       // authenticated `routes` getter, not the federation layer.
       if (req.path.startsWith("/admin")) return next();
+
+      // Diagnostic: log inbox POSTs to detect federation stalls
+      if (req.method === "POST" && req.path.includes("inbox")) {
+        const ua = req.get("user-agent") || "unknown";
+        const bodyParsed = req.body !== undefined && Object.keys(req.body || {}).length > 0;
+        console.info(`[federation-diag] POST ${req.path} from=${ua.slice(0, 60)} bodyParsed=${bodyParsed} readable=${req.readable}`);
+      }
+
       return self._fedifyMiddleware(req, res, next);
     });
 
@@ -1408,7 +1416,7 @@ export default class ActivityPubEndpoint {
       );
       this._collections.ap_oauth_tokens.createIndex(
         { accessToken: 1 },
-        { unique: true, background: true },
+        { unique: true, sparse: true, background: true },
       );
       this._collections.ap_oauth_tokens.createIndex(
         { code: 1 },
@@ -1551,6 +1559,20 @@ export default class ActivityPubEndpoint {
       }),
       keyRefreshHandle,
     );
+
+    // Backfill ap_timeline from posts collection (idempotent, runs on every startup)
+    import("./lib/mastodon/backfill-timeline.js").then(({ backfillTimeline }) => {
+      // Delay to let MongoDB connections settle
+      setTimeout(() => {
+        backfillTimeline(this._collections).then(({ total, inserted, skipped }) => {
+          if (inserted > 0) {
+            console.log(`[Mastodon API] Timeline backfill: ${inserted} posts added (${skipped} already existed, ${total} total)`);
+          }
+        }).catch((error) => {
+          console.warn("[Mastodon API] Timeline backfill failed:", error.message);
+        });
+      }, 5000);
+    });
 
     // Start async inbox queue processor (processes one item every 3s)
     this._inboxProcessorInterval = startInboxProcessor(
