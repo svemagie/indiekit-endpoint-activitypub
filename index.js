@@ -721,13 +721,19 @@ export default class ActivityPubEndpoint {
       );
 
       // Resolve the remote actor to get their inbox
-      // Use authenticated document loader for servers requiring Authorized Fetch
+      // Try authenticated document loader first (for Authorized Fetch servers),
+      // fall back to unsigned if that fails (some servers reject signed GETs)
       const documentLoader = await ctx.getDocumentLoader({
         identifier: handle,
       });
-      const remoteActor = await lookupWithSecurity(ctx,actorUrl, {
+      let remoteActor = await lookupWithSecurity(ctx, actorUrl, {
         documentLoader,
       });
+      if (!remoteActor) {
+        // Retry without authentication — some servers (e.g., tags.pub)
+        // may reject or mishandle signed GET requests
+        remoteActor = await lookupWithSecurity(ctx, actorUrl);
+      }
       if (!remoteActor) {
         return { ok: false, error: "Could not resolve remote actor" };
       }
