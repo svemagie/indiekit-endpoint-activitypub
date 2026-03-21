@@ -1,6 +1,6 @@
 # @rmdes/indiekit-endpoint-activitypub
 
-ActivityPub federation endpoint for [Indiekit](https://getindiekit.com), built on [Fedify](https://fedify.dev) 2.0. Makes your IndieWeb site a full fediverse actor — discoverable, followable, and interactive from Mastodon, Misskey, Pixelfed, and any ActivityPub-compatible platform.
+ActivityPub federation endpoint for [Indiekit](https://getindiekit.com), built on [Fedify](https://fedify.dev) 2.0. Makes your IndieWeb site a full fediverse actor — discoverable, followable, and interactive from Mastodon, Misskey, Pixelfed, and any ActivityPub-compatible platform. Includes a Mastodon-compatible Client API so you can use Phanpy, Elk, Moshidon, Fedilab, and other Mastodon clients with your own AP instance.
 
 ## Features
 
@@ -79,6 +79,23 @@ ActivityPub federation endpoint for [Indiekit](https://getindiekit.com), built o
 - OpenTelemetry tracing for federation activity
 - Real-time activity inspection
 
+**Mastodon Client API** *(v3.0.0+)*
+- Full Mastodon REST API compatibility — use Phanpy, Elk, Moshidon, Fedilab, or any Mastodon-compatible client
+- OAuth2 with PKCE (S256) — app registration, authorization, token exchange
+- HTML+JS redirect for native Android apps (Chrome Custom Tabs block 302 to custom URI schemes)
+- Home, public, and hashtag timelines with chronological published-date pagination
+- Status creation via Micropub pipeline — posts flow through Indiekit → content file → AP syndication
+- URL auto-linkification and @mention extraction in posted content
+- Thread context (ancestors + descendants)
+- Remote profile resolution via Fedify WebFinger with follower/following/post counts from AP collections
+- Account stats enrichment — embedded account data in timeline responses includes real counts
+- Favourite, boost, bookmark interactions federated via Fedify AP activities
+- Notifications with type filtering
+- Search across accounts, statuses, and hashtags with remote resolution
+- Domain blocks API
+- Timeline backfill from posts collection on startup (bookmarks, likes, reposts get synthesized content)
+- In-memory account stats cache (500 entries, 1h TTL) for performance
+
 **Admin UI**
 - Dashboard with follower/following counts and recent activity
 - Profile editor (name, bio, avatar, header, profile links with rel="me" verification)
@@ -86,6 +103,7 @@ ActivityPub federation endpoint for [Indiekit](https://getindiekit.com), built o
 - Featured tags (hashtag collection)
 - Activity log (inbound/outbound)
 - Follower and following lists with source tracking
+- Federation management page with moderation overview (blocked servers, blocked accounts, muted)
 
 ## Requirements
 
