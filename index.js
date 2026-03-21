@@ -259,6 +259,101 @@ export default class ActivityPubEndpoint {
         });
     });
 
+    // Public API: resolve a blog post URL → its Fedify-served AP object URL.
+    //
+    //   GET /api/ap-url?post=https://blog.example.com/notes/foo/
+    //   → { apUrl: "https://blog.example.com/activitypub/objects/note/notes/foo/" }
+    //
+    // Used by "Also on Fediverse" widgets so that the Mastodon authorize_interaction
+    // flow receives a URL that is always routed to Node.js (never intercepted by a
+    // static file server), ensuring reliable AP content negotiation.
+    //
+    // Special case — AP-likes: when like-of points to an ActivityPub object the
+    // widget should open the *original* post on the remote instance so the user
+    // can interact with it there.  We return { apUrl: likeOf } in that case.
+    router.get("/api/ap-url", async (req, res) => {
+      try {
+        const postParam = req.query.post;
+        if (!postParam) {
+          return res.status(400).json({ error: "post parameter required" });
+        }
+
+        const { application } = req.app.locals;
+        const postsCollection = application.collections?.get("posts");
+
+        if (!postsCollection) {
+          return res.status(503).json({ error: "Database unavailable" });
+        }
+
+        const publicationUrl = (self._publicationUrl || application.url || "").replace(/\/$/, "");
+
+        // Match with or without trailing slash
+        const postUrl = postParam.replace(/\/$/, "");
+        const post = await postsCollection.findOne({
+          "properties.url": { $in: [postUrl, postUrl + "/"] },
+        });
+
+        if (!post) {
+          return res.status(404).json({ error: "Post not found" });
+        }
+
+        // Draft and unlisted posts are not federated
+        if (post?.properties?.["post-status"] === "draft") {
+          return res.status(404).json({ error: "Post not found" });
+        }
+        if (post?.properties?.visibility === "unlisted") {
+          return res.status(404).json({ error: "Post not found" });
+        }
+
+        const postType = post.properties?.["post-type"];
+
+        // For AP-likes: the widget should open the liked post on the remote instance
+        // so the user can interact with it there. We detect AP URLs the same way as
+        // jf2-to-as2.js: HEAD request with Accept: application/activity+json.
+        if (postType === "like") {
+          const likeOf = post.properties?.["like-of"] || "";
+          if (likeOf) {
+            let isAp = false;
+            try {
+              const ctrl = new AbortController();
+              const tid = setTimeout(() => ctrl.abort(), 3000);
+              const r = await fetch(likeOf, {
+                method: "HEAD",
+                headers: { Accept: "application/activity+json, application/ld+json" },
+                signal: ctrl.signal,
+              });
+              clearTimeout(tid);
+              const ct = r.headers.get("content-type") || "";
+              isAp = ct.includes("activity+json") || ct.includes("ld+json");
+            } catch { /* network error — treat as non-AP */ }
+            if (isAp) {
+              res.set("Cache-Control", "public, max-age=60");
+              return res.json({ apUrl: likeOf });
+            }
+          }
+        }
+
+        // Determine the AP object type (mirrors jf2-to-as2.js logic)
+        const isArticle = postType === "article" && !!post.properties?.name;
+        const objectType = isArticle ? "article" : "note";
+
+        // Extract the path portion after the publication base URL
+        const resolvedUrl = (post.properties?.url || "").replace(/\/$/, "");
+        if (!resolvedUrl.startsWith(publicationUrl)) {
+          return res.status(500).json({ error: "Post URL does not match publication base" });
+        }
+        const postPath = resolvedUrl.slice(publicationUrl.length).replace(/^\//, "");
+
+        const mp = (self.options.mountPath || "").replace(/\/$/, "");
+        const apUrl = `${publicationUrl}${mp}/objects/${objectType}/${postPath}`;
+
+        res.set("Cache-Control", "public, max-age=300");
+        res.json({ apUrl });
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
+    });
+
     return router;
   }
 

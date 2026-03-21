@@ -439,6 +439,7 @@ On restart, `refollow:pending` entries are reset to `import` to prevent stale cl
 | `GET/POST` | `{mount}/admin/migrate` | Mastodon migration | Yes |
 | `*` | `{mount}/admin/refollow/*` | Batch refollow control | Yes |
 | `*` | `{mount}/__debug__/*` | Fedify debug dashboard (if enabled) | Password |
+| `GET` | `{mount}/api/ap-url?post={url}` | Resolve blog post URL → AP object URL (for "Also on Fediverse" widget) | No |
 | `GET` | `{mount}/users/:identifier` | Public profile page (HTML fallback) | No |
 | `GET` | `/*` (root) | Content negotiation (AP clients only) | No |
 
@@ -516,3 +517,43 @@ The reader CSS (`assets/reader.css`) uses Indiekit's theme custom properties for
 - `--color-red45`, `--color-green50`, etc. (not hardcoded hex)
 
 Post types are differentiated by left border color: purple (notes), green (articles), yellow (boosts), primary (replies).
+
+## svemagie Fork — Changes vs Upstream
+
+This fork (`svemagie/indiekit-endpoint-activitypub`) extends the upstream `rmdes/indiekit-endpoint-activitypub` with the following changes. All additions are motivated by strict ActivityPub protocol compliance and real-world interoperability with Mastodon.
+
+### 1. `allowPrivateAddress: true` in `createFederation` (`lib/federation-setup.js`)
+
+**Problem:** When the blog hostname resolves to a private RFC-1918 address (e.g. `10.x.x.x`) from within the local network where the server runs, Fedify's built-in SSRF guard throws `"Disallowed private URL"` for own-site lookups. This breaks `lookupObject()` and WebFinger for posts on the same site.
+
+**Fix:** `allowPrivateAddress: true` is passed to `createFederation`. This disables the SSRF IP check so Fedify can dereference own-site URLs that happen to resolve to private IPs on the LAN.
+
+### 2. Canonical `id` on Like activities (`lib/jf2-to-as2.js`)
+
+**Problem:** Per ActivityPub §6.2.1, activities sent from a server SHOULD carry an `id` URI so that remote servers can dereference them. The `Like` activity produced by `jf2ToAS2Activity` had no `id`, which meant remote servers couldn't look it up by URL.
+
+**Fix:** `jf2ToAS2Activity` derives the mount path from the actor URL (`/activitypub/users/sven` → `/activitypub`) and constructs a canonical id at `{publicationUrl}{mountPath}/activities/like/{post-relative-path}`.
+
+### 3. Like activity dispatcher (`lib/federation-setup.js`)
+
+**Problem:** Per ActivityPub §3.1, objects with an `id` MUST be dereferenceable at that URI. With canonical ids added (change 2), requests to `/activitypub/activities/like/{id}` would 404 because no Fedify dispatcher was registered for that path pattern.
+
+**Fix:** `Like` is added to the `@fedify/fedify/vocab` imports and a `federation.setObjectDispatcher(Like, ...)` is registered after the Article dispatcher in `setupObjectDispatchers`. The handler looks up the post in MongoDB, filters drafts/unlisted/deleted, calls `jf2ToAS2Activity`, and returns the `Like` if that's what was produced.
+
+### 4. Repost commentary in ActivityPub output (`lib/jf2-to-as2.js`)
+
+**Problem (two bugs):**
+1. `jf2ToAS2Activity` always returned a bare `Announce { object: <external-url> }` for reposts, even when the post had author commentary. External URLs (e.g. fromjason.xyz) don't serve AP JSON, so Mastodon received the `Announce` but couldn't fetch the object — the activity was silently dropped from followers' timelines.
+2. `jf2ToActivityStreams` (used for content negotiation/search) returned a `Note` whose `content` was hardcoded to `🔁 <url>`, ignoring any commentary text.
+
+**Fix:**
+- `jf2ToAS2Activity`: if the repost has commentary (`properties.content`), skip the early `Announce` return and fall through to the `Create(Note)` path — the note content block now has a `repost` branch that formats the content as `{commentary}<br><br>🔁 <url>`. Pure reposts (no commentary) keep the `Announce` behaviour.
+- `jf2ToActivityStreams`: extracts `commentary` from `properties.content` and prepends it to the note content when present.
+
+### 5. `/api/ap-url` public endpoint (`index.js`)
+
+**Problem:** The "Also on Fediverse" widget on blog post pages passes the blog post URL to Mastodon's `authorize_interaction` flow. When the remote instance fetches that URL with `Accept: application/activity+json`, it may hit nginx (which serves static HTML), causing "Could not connect to the given address" errors.
+
+**Fix:** A public `GET /api/ap-url?post={blog-post-url}` route is added to `routesPublic`. It resolves the post in MongoDB, determines its AP object type, and returns the canonical Fedify-served URL (`/activitypub/objects/note/{path}` or `/activitypub/objects/article/{path}`). These paths are always proxied to Node.js and reliably return AP JSON.
+
+**Special case — AP-likes:** When `like-of` points to an ActivityPub URL (e.g. a Mastodon status), the endpoint detects it via a HEAD request with `Accept: application/activity+json` and returns `{ apUrl: likeOf }` instead. This causes the `authorize_interaction` flow to open the *original remote post* (where the user can like/boost/reply natively) rather than the blog's own representation of the like.
