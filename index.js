@@ -855,11 +855,11 @@ export default class ActivityPubEndpoint {
       );
 
       // Resolve the remote actor to get their inbox
-      // Use authenticated document loader for servers requiring Authorized Fetch
+      // lookupWithSecurity handles signed→unsigned fallback automatically
       const documentLoader = await ctx.getDocumentLoader({
         identifier: handle,
       });
-      const remoteActor = await lookupWithSecurity(ctx,actorUrl, {
+      const remoteActor = await lookupWithSecurity(ctx, actorUrl, {
         documentLoader,
       });
       if (!remoteActor) {
