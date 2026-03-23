@@ -1828,6 +1828,7 @@ export default class ActivityPubEndpoint {
         followActor: (url, info) => pluginRef.followActor(url, info),
         unfollowActor: (url) => pluginRef.unfollowActor(url),
         loadRsaKey: () => pluginRef._loadRsaPrivateKey(),
+        broadcastActorUpdate: () => pluginRef.broadcastActorUpdate(),
       },
     });
     Indiekit.addEndpoint({
