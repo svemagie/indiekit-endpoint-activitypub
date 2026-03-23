@@ -1180,24 +1180,37 @@ export default class ActivityPubEndpoint {
     if (!this._federation) return;
 
     try {
+      const { Update } = await import("@fedify/fedify/vocab");
       const actorUrl = this._getActorUrl();
-      const activity = jf2ToAS2Activity(
+      const handle = this.options.actor.handle;
+      const ctx = this._federation.createContext(
+        new URL(this._publicationUrl),
+        { handle, publicationUrl: this._publicationUrl },
+      );
+
+      // Build the Note/Article object by calling jf2ToAS2Activity() and
+      // extracting the wrapped object from the returned Create activity.
+      // For post edits, Fediverse servers expect an Update activity wrapping
+      // the updated object — NOT a second Create activity.
+      const createActivity = jf2ToAS2Activity(
         properties,
         actorUrl,
         this._publicationUrl,
         { visibility: this.options.defaultVisibility },
       );
 
-      if (!activity) {
+      if (!createActivity) {
         console.warn(`[ActivityPub] broadcastPostUpdate: could not convert post to AS2 for ${properties?.url}`);
         return;
       }
 
-      const handle = this.options.actor.handle;
-      const ctx = this._federation.createContext(
-        new URL(this._publicationUrl),
-        { handle, publicationUrl: this._publicationUrl },
-      );
+      // Extract the Note/Article object from the Create wrapper, then build
+      // an Update activity around it — matching broadcastActorUpdate() pattern.
+      const noteObject = await createActivity.getObject();
+      const activity = new Update({
+        actor: ctx.getActorUri(handle),
+        object: noteObject,
+      });
 
       const followers = await this._collections.ap_followers
         .find({})
@@ -1702,6 +1715,7 @@ export default class ActivityPubEndpoint {
     }, 10_000);
 
     // Run one-time migrations (idempotent — safe to run on every startup)
+    console.info("[ActivityPub] Init: starting post-refollow setup");
     runSeparateMentionsMigration(this._collections).then(({ skipped, updated }) => {
       if (!skipped) {
         console.log(`[ActivityPub] Migration separate-mentions: updated ${updated} timeline items`);
@@ -1748,6 +1762,7 @@ export default class ActivityPubEndpoint {
     });
 
     // Start async inbox queue processor (processes one item every 3s)
+    console.info("[ActivityPub] Init: starting inbox queue processor");
     this._inboxProcessorInterval = startInboxProcessor(
       this._collections,
       () => this._federation?.createContext(new URL(this._publicationUrl), {
