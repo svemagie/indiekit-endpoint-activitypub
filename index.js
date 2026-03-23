@@ -683,6 +683,9 @@ export default class ActivityPubEndpoint {
           return undefined;
         }
       },
+
+      delete: async (url) => this.delete(url),
+      update: async (properties) => this.update(properties),
     };
   }
 
