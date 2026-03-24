@@ -116,6 +116,7 @@ import {
 import { startBatchRefollow } from "./lib/batch-refollow.js";
 import { logActivity } from "./lib/activity-log.js";
 import { resolveAuthor } from "./lib/resolve-author.js";
+import { addTimelineItem } from "./lib/storage/timeline.js";
 import { scheduleCleanup } from "./lib/timeline-cleanup.js";
 import { runSeparateMentionsMigration } from "./lib/migrations/separate-mentions.js";
 import { loadBlockedServersToRedis } from "./lib/storage/server-blocks.js";
@@ -813,6 +814,49 @@ export default class ActivityPubEndpoint {
           console.info(
             `[ActivityPub] Syndication queued: ${typeName} for ${properties.url}${replyNote}`,
           );
+
+          // Mirror own Micropub-created posts into ap_timeline so the Mastodon
+          // Client API (context, statuses, etc.) can find them by ID.
+          if (typeName === "Create" && properties.url) {
+            try {
+              const postUrl = properties.url;
+              const rawHtml = properties.content?.html || (typeof properties.content === "string" ? properties.content : "") || "";
+              const now = new Date().toISOString();
+              const postType = properties["post-type"] || "note";
+              const asArray = (v) => Array.isArray(v) ? v : v ? [v] : [];
+              await addTimelineItem(self._collections, {
+                uid: postUrl,
+                url: postUrl,
+                type: postType,
+                content: { html: rawHtml, text: rawHtml.replace(/<[^>]*>/g, "") },
+                summary: properties["content-warning"] || properties.summary || "",
+                sensitive: !!(properties.sensitive || properties["post-status"] === "sensitive" || properties["content-warning"]),
+                visibility: properties.visibility || self.options.defaultVisibility || "public",
+                language: properties.lang || properties.language || null,
+                inReplyTo: properties["in-reply-to"] || null,
+                published: properties.published || now,
+                createdAt: now,
+                author: {
+                  name: self.options.actor.name || handle,
+                  url: actorUrl,
+                  photo: self.options.actor.icon || "",
+                  handle: `@${handle}`,
+                  emojis: [],
+                  bot: false,
+                },
+                photo: asArray(properties.photo),
+                video: asArray(properties.video),
+                audio: asArray(properties.audio),
+                category: asArray(properties.category),
+                counts: { replies: 0, boosts: 0, likes: 0 },
+                linkPreviews: [],
+                mentions: [],
+                emojis: [],
+              });
+            } catch (timelineError) {
+              console.warn("[ActivityPub] Failed to mirror syndicated post to ap_timeline:", timelineError.message);
+            }
+          }
 
           return properties.url || undefined;
         } catch (error) {
