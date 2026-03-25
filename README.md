@@ -88,13 +88,17 @@ ActivityPub federation endpoint for [Indiekit](https://getindiekit.com), built o
 - URL auto-linkification and @mention extraction in posted content
 - Thread context (ancestors + descendants)
 - Remote profile resolution via Fedify WebFinger with follower/following/post counts from AP collections
-- Account stats enrichment — embedded account data in timeline responses includes real counts
+- Account stats enrichment — cached account data applied immediately; uncached accounts resolved in background
 - Favourite, boost, bookmark interactions federated via Fedify AP activities
 - Notifications with type filtering
 - Search across accounts, statuses, and hashtags with remote resolution
 - Domain blocks API
 - Timeline backfill from posts collection on startup (bookmarks, likes, reposts get synthesized content)
 - In-memory account stats cache (500 entries, 1h TTL) for performance
+- OAuth2 scope enforcement — read/write scope validation on all API routes
+- Rate limiting — configurable limits on API, auth, and app registration endpoints
+- Access token expiry (1 hour) with refresh token rotation (90 days)
+- PKCE (S256) and CSRF protection on authorization flow
 
 **Admin UI**
 - Dashboard with follower/following counts and recent activity
@@ -318,6 +322,9 @@ The plugin creates these collections automatically:
 | `ap_blocked_servers` | Blocked server domains (instance-level blocks) |
 | `ap_key_freshness` | Tracks when remote actor keys were last verified |
 | `ap_inbox_queue` | Persistent async inbox processing queue |
+| `ap_oauth_apps` | Mastodon API client app registrations |
+| `ap_oauth_tokens` | OAuth2 authorization codes and access tokens |
+| `ap_markers` | Read position markers for Mastodon API clients |
 
 ## Supported Post Types
 
@@ -411,7 +418,6 @@ This is not a bug — Fedify requires explicit opt-in for signed fetches. But it
 - **Single actor** — One fediverse identity per Indiekit instance
 - **No Authorized Fetch enforcement** — `.authorize()` disabled on actor dispatcher (see workarounds above)
 - **No image upload in reader** — Compose form is text-only
-- **No custom emoji rendering** — Custom emoji shortcodes display as text
 - **In-process queue without Redis** — Activities may be lost on restart
 
 ## Acknowledgements

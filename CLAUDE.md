@@ -14,15 +14,19 @@ An Indiekit plugin that adds full ActivityPub federation via [Fedify](https://fe
 ## Architecture Overview
 
 ```
-index.js                          ← Plugin entry, route registration, syndicator
+index.js                          ← Plugin entry, route registration, lifecycle orchestration
 ├── lib/federation-setup.js       ← Fedify Federation instance, dispatchers, collections
 ├── lib/federation-bridge.js      ← Express ↔ Fedify request/response bridge
+├── lib/federation-actions.js     ← Facade for controller federation access (context creation, actor resolution)
 ├── lib/inbox-listeners.js        ← Fedify inbox listener registration + reply forwarding
 ├── lib/inbox-handlers.js         ← Async inbox activity handlers (Create, Like, Announce, etc.)
 ├── lib/inbox-queue.js            ← Persistent MongoDB-backed async inbox processing queue
 ├── lib/outbox-failure.js         ← Outbox delivery failure handling (410 cleanup, 404 strikes, strike reset)
+├── lib/batch-broadcast.js        ← Shared batch delivery to followers (dedup, batching, logging)
 ├── lib/jf2-to-as2.js             ← JF2 → ActivityStreams conversion (plain JSON + Fedify vocab)
+├── lib/syndicator.js             ← Indiekit syndicator factory (JF2→AS2, mention resolution, delivery)
 ├── lib/kv-store.js               ← MongoDB-backed KvStore for Fedify (get/set/delete/list)
+├── lib/init-indexes.js           ← MongoDB index creation (idempotent startup)
 ├── lib/activity-log.js           ← Activity logging to ap_activities
 ├── lib/item-processing.js        ← Unified item processing pipeline (moderation, quotes, interactions, rendering)
 ├── lib/timeline-store.js         ← Timeline item extraction + sanitization
@@ -117,7 +121,8 @@ index.js                          ← Plugin entry, route registration, syndicat
 ## Data Flow
 
 ```
-Outbound: Indiekit post → syndicator.syndicate() → jf2ToAS2Activity() → ctx.sendActivity() → follower inboxes
+Outbound: Indiekit post → syndicator.js syndicate() → jf2ToAS2Activity() → ctx.sendActivity() → follower inboxes
+          Broadcast (Update/Delete) → batch-broadcast.js → deduplicated shared inbox delivery
           Delivery failure → outbox-failure.js → 410: full cleanup | 404: strike system → eventual cleanup
 Inbound:  Remote inbox POST → Fedify → inbox-listeners.js → ap_inbox_queue → inbox-handlers.js → MongoDB
           Reply forwarding: inbox-listeners.js checks if reply is to our post → ctx.forwardActivity() → follower inboxes
