@@ -181,6 +181,26 @@ export default class ActivityPubEndpoint {
         requiresDatabase: true,
       },
       {
+        href: `${this.options.mountPath}/admin/reader/notifications`,
+        text: "activitypub.notifications.title",
+        requiresDatabase: true,
+      },
+      {
+        href: `${this.options.mountPath}/admin/reader/messages`,
+        text: "activitypub.messages.title",
+        requiresDatabase: true,
+      },
+      {
+        href: `${this.options.mountPath}/admin/reader/moderation`,
+        text: "activitypub.moderation.title",
+        requiresDatabase: true,
+      },
+      {
+        href: `${this.options.mountPath}/admin/my-profile`,
+        text: "activitypub.myProfile.title",
+        requiresDatabase: true,
+      },
+      {
         href: `${this.options.mountPath}/admin/federation`,
         text: "activitypub.federationMgmt.title",
         requiresDatabase: true,
