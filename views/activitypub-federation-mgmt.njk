@@ -34,7 +34,7 @@
         </a>
       {% endif %}
     </div>
-    <p x-show="actionResult" x-text="actionResult" class="ap-federation__result" x-cloak></p>
+    <p x-show="actionResult" x-text="actionResult" class="ap-federation__result" role="status" x-cloak></p>
   </section>
 
   {# --- Object Lookup --- #}
@@ -49,7 +49,7 @@
         <span x-show="lookupLoading" x-cloak>{{ __("activitypub.federationMgmt.lookupLoading") }}</span>
       </button>
     </form>
-    <p x-show="lookupError" x-text="lookupError" class="ap-federation__error" x-cloak></p>
+    <p x-show="lookupError" x-text="lookupError" class="ap-federation__error" role="alert" x-cloak></p>
     <pre x-show="lookupResult" x-text="lookupResult" class="ap-federation__json-view" x-cloak></pre>
   </section>
 

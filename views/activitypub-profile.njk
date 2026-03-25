@@ -75,29 +75,25 @@
       values: [profile.actorType or "Person"]
     }) }}
 
-    <fieldset class="fieldset" style="margin-block-end: var(--space-l);">
+    <fieldset class="fieldset" style="margin-block-end: var(--space-l);" x-data="{ links: [{% if profile.attachments and profile.attachments.length > 0 %}{% for att in profile.attachments %}{ name: {{ att.name | dump | safe }}, value: {{ att.value | dump | safe }} }{% if not loop.last %},{% endif %}{% endfor %}{% endif %}] }">
       <legend class="label">{{ __("activitypub.profile.linksLabel") }}</legend>
       <p class="hint">{{ __("activitypub.profile.linksHint") }}</p>
 
-      <div id="profile-links">
-        {% if profile.attachments and profile.attachments.length > 0 %}
-          {% for att in profile.attachments %}
-            <div class="profile-link-row" style="display: grid; grid-template-columns: 1fr 2fr auto; gap: var(--space-s); align-items: end; margin-block-end: var(--space-s);">
-              <div>
-                <label class="label" for="link_name_{{ loop.index }}">{{ __("activitypub.profile.linkNameLabel") }}</label>
-                <input class="input" type="text" id="link_name_{{ loop.index }}" name="link_name[]" value="{{ att.name }}" placeholder="Website">
-              </div>
-              <div>
-                <label class="label" for="link_value_{{ loop.index }}">{{ __("activitypub.profile.linkValueLabel") }}</label>
-                <input class="input" type="url" id="link_value_{{ loop.index }}" name="link_value[]" value="{{ att.value }}" placeholder="https://example.com">
-              </div>
-              <button type="button" class="button button--small profile-link-remove" style="margin-block-end: 4px;">{{ __("activitypub.profile.removeLink") }}</button>
-            </div>
-          {% endfor %}
-        {% endif %}
-      </div>
+      <template x-for="(link, index) in links" :key="index">
+        <div class="profile-link-row" style="display: grid; grid-template-columns: 1fr 2fr auto; gap: var(--space-s); align-items: end; margin-block-end: var(--space-s);">
+          <div>
+            <label class="label">{{ __("activitypub.profile.linkNameLabel") }}</label>
+            <input class="input" type="text" :name="'link_name[]'" x-model="link.name" placeholder="Website">
+          </div>
+          <div>
+            <label class="label">{{ __("activitypub.profile.linkValueLabel") }}</label>
+            <input class="input" type="url" :name="'link_value[]'" x-model="link.value" placeholder="https://example.com">
+          </div>
+          <button type="button" class="button button--small profile-link-remove" style="margin-block-end: 4px;" @click="links.splice(index, 1)">{{ __("activitypub.profile.removeLink") }}</button>
+        </div>
+      </template>
 
-      <button type="button" class="button button--small" id="add-link-btn">{{ __("activitypub.profile.addLink") }}</button>
+      <button type="button" class="button button--small" @click="links.push({ name: '', value: '' })">{{ __("activitypub.profile.addLink") }}</button>
     </fieldset>
 
     {{ checkboxes({
@@ -127,60 +123,4 @@
     {{ button({ text: __("activitypub.profile.save") }) }}
   </form>
 
-  <script>
-    (function() {
-      document.getElementById('profile-links').addEventListener('click', function(e) {
-        var btn = e.target.closest('.profile-link-remove');
-        if (btn) btn.closest('.profile-link-row').remove();
-      });
-
-      var linkCount = {{ (profile.attachments.length if profile.attachments) or 0 }};
-      document.getElementById('add-link-btn').addEventListener('click', function() {
-        linkCount++;
-        var container = document.getElementById('profile-links');
-        var row = document.createElement('div');
-        row.className = 'profile-link-row';
-        row.style.cssText = 'display: grid; grid-template-columns: 1fr 2fr auto; gap: var(--space-s); align-items: end; margin-block-end: var(--space-s);';
-
-        var nameDiv = document.createElement('div');
-        var nameLabel = document.createElement('label');
-        nameLabel.className = 'label';
-        nameLabel.setAttribute('for', 'link_name_' + linkCount);
-        nameLabel.textContent = 'Label';
-        var nameInput = document.createElement('input');
-        nameInput.className = 'input';
-        nameInput.type = 'text';
-        nameInput.id = 'link_name_' + linkCount;
-        nameInput.name = 'link_name[]';
-        nameInput.placeholder = 'Website';
-        nameDiv.appendChild(nameLabel);
-        nameDiv.appendChild(nameInput);
-
-        var valueDiv = document.createElement('div');
-        var valueLabel = document.createElement('label');
-        valueLabel.className = 'label';
-        valueLabel.setAttribute('for', 'link_value_' + linkCount);
-        valueLabel.textContent = 'URL';
-        var valueInput = document.createElement('input');
-        valueInput.className = 'input';
-        valueInput.type = 'url';
-        valueInput.id = 'link_value_' + linkCount;
-        valueInput.name = 'link_value[]';
-        valueInput.placeholder = 'https://example.com';
-        valueDiv.appendChild(valueLabel);
-        valueDiv.appendChild(valueInput);
-
-        var removeBtn = document.createElement('button');
-        removeBtn.type = 'button';
-        removeBtn.className = 'button button--small profile-link-remove';
-        removeBtn.style.cssText = 'margin-block-end: 4px;';
-        removeBtn.textContent = 'Remove';
-
-        row.appendChild(nameDiv);
-        row.appendChild(valueDiv);
-        row.appendChild(removeBtn);
-        container.appendChild(row);
-      });
-    })();
-  </script>
 {% endblock %}

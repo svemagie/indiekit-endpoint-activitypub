@@ -26,14 +26,14 @@
   {# Boost header if this is a boosted post #}
   {% if item.type == "boost" and item.boostedBy %}
     <div class="ap-card__boost">
-      🔁 {% if item.boostedBy.url %}<a href="{{ mountPath }}/admin/reader/profile?url={{ item.boostedBy.url | urlencode }}">{% if item.boostedBy.nameHtml %}{{ item.boostedBy.nameHtml | safe }}{% else %}{{ item.boostedBy.name or "Someone" }}{% endif %}</a>{% else %}{% if item.boostedBy.nameHtml %}{{ item.boostedBy.nameHtml | safe }}{% else %}{{ item.boostedBy.name or "Someone" }}{% endif %}{% endif %} {{ __("activitypub.reader.boosted") }}
+      <span aria-hidden="true">🔁</span><span class="visually-hidden">{{ __("activitypub.reader.boosted") }}</span> {% if item.boostedBy.url %}<a href="{{ mountPath }}/admin/reader/profile?url={{ item.boostedBy.url | urlencode }}">{% if item.boostedBy.nameHtml %}{{ item.boostedBy.nameHtml | safe }}{% else %}{{ item.boostedBy.name or "Someone" }}{% endif %}</a>{% else %}{% if item.boostedBy.nameHtml %}{{ item.boostedBy.nameHtml | safe }}{% else %}{{ item.boostedBy.name or "Someone" }}{% endif %}{% endif %} {{ __("activitypub.reader.boosted") }}
     </div>
   {% endif %}
 
   {# Reply context if this is a reply #}
   {% if item.inReplyTo %}
     <div class="ap-card__reply-to">
-      ↩ {{ __("activitypub.reader.replyingTo") }} <a href="{{ mountPath }}/admin/reader/post?url={{ item.inReplyTo | urlencode }}">{{ item.inReplyTo }}</a>
+      <span aria-hidden="true">↩</span> {{ __("activitypub.reader.replyingTo") }} <a href="{{ mountPath }}/admin/reader/post?url={{ item.inReplyTo | urlencode }}">{{ item.inReplyTo }}</a>
     </div>
   {% endif %}
 
@@ -63,10 +63,10 @@
         <time datetime="{{ item.published }}" class="ap-card__timestamp" x-data x-relative-time>
           {{ item.published | date("PPp") }}
         </time>
-        {% if item.updated %}<span class="ap-card__edited" title="{{ item.updated | date('PPp') }}">✏️</span>{% endif %}
+        {% if item.updated %}<span class="ap-card__edited" title="{{ item.updated | date('PPp') }}" aria-label="Edited"><span aria-hidden="true">✏️</span></span>{% endif %}
       </a>
       {% if item.visibility and item.visibility != "public" %}
-        <span class="ap-card__visibility ap-card__visibility--{{ item.visibility }}" title="{% if item.visibility == 'unlisted' %}{{ __('activitypub.reader.compose.visibilityUnlisted') }}{% elif item.visibility == 'private' %}{{ __('activitypub.reader.compose.visibilityFollowers') }}{% elif item.visibility == 'direct' %}DM{% endif %}">{% if item.visibility == "unlisted" %}🔓{% elif item.visibility == "private" %}🔒{% elif item.visibility == "direct" %}✉️{% endif %}</span>
+        <span class="ap-card__visibility ap-card__visibility--{{ item.visibility }}" title="{% if item.visibility == 'unlisted' %}{{ __('activitypub.reader.compose.visibilityUnlisted') }}{% elif item.visibility == 'private' %}{{ __('activitypub.reader.compose.visibilityFollowers') }}{% elif item.visibility == 'direct' %}DM{% endif %}" aria-label="{% if item.visibility == 'unlisted' %}{{ __('activitypub.reader.compose.visibilityUnlisted') }}{% elif item.visibility == 'private' %}{{ __('activitypub.reader.compose.visibilityFollowers') }}{% elif item.visibility == 'direct' %}DM{% endif %}"><span aria-hidden="true">{% if item.visibility == "unlisted" %}🔓{% elif item.visibility == "private" %}🔒{% elif item.visibility == "direct" %}✉️{% endif %}</span></span>
       {% endif %}
     {% endif %}
   </header>
@@ -89,48 +89,11 @@
         <span x-show="shown" x-cloak>{{ __("activitypub.reader.hideContent") }}</span>
       </button>
       <div x-show="shown" x-cloak>
-        {% if item.content and item.content.html %}
-          <div class="ap-card__content">
-            {{ item.content.html | safe }}
-          </div>
-        {% endif %}
-
-        {# Quoted post embed #}
-        {% include "partials/ap-quote-embed.njk" %}
-
-        {# Link previews #}
-        {% include "partials/ap-link-preview.njk" %}
-
-        {# Media hidden behind CW #}
-        {% include "partials/ap-item-media.njk" %}
-
-        {# Poll options #}
-        {% if item.type == "question" or (item.pollOptions and item.pollOptions.length > 0) %}
-          {% include "partials/ap-poll-options.njk" %}
-        {% endif %}
+        {% include "partials/ap-item-content.njk" %}
       </div>
     </div>
   {% else %}
-    {# Regular content (no CW) #}
-    {% if item.content and item.content.html %}
-      <div class="ap-card__content">
-        {{ item.content.html | safe }}
-      </div>
-    {% endif %}
-
-    {# Quoted post embed #}
-    {% include "partials/ap-quote-embed.njk" %}
-
-    {# Link previews #}
-    {% include "partials/ap-link-preview.njk" %}
-
-    {# Media visible directly #}
-    {% include "partials/ap-item-media.njk" %}
-
-    {# Poll options #}
-    {% if item.type == "question" or (item.pollOptions and item.pollOptions.length > 0) %}
-      {% include "partials/ap-poll-options.njk" %}
-    {% endif %}
+    {% include "partials/ap-item-content.njk" %}
   {% endif %}
 
   {# Mentions and hashtags #}
@@ -171,77 +134,11 @@
     data-item-url="{{ itemUrl }}"
     data-csrf-token="{{ csrfToken }}"
     data-mount-path="{{ mountPath }}"
-    x-data="{
-      liked: {{ 'true' if isLiked else 'false' }},
-      boosted: {{ 'true' if isBoosted else 'false' }},
-      saved: false,
-      loading: false,
-      error: '',
-      boostCount: {{ boostCount if boostCount != null else 'null' }},
-      likeCount: {{ likeCount if likeCount != null else 'null' }},
-      async saveLater() {
-        if (this.saved) return;
-        const el = this.$root;
-        const itemUrl = el.dataset.itemUrl;
-        try {
-          const res = await fetch('/readlater/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              url: itemUrl,
-              title: el.closest('article')?.querySelector('p')?.textContent?.substring(0, 80) || itemUrl,
-              source: 'activitypub'
-            }),
-            credentials: 'same-origin'
-          });
-          if (res.ok) this.saved = true;
-          else this.error = 'Failed to save';
-        } catch (e) {
-          this.error = e.message;
-        }
-        if (this.error) setTimeout(() => this.error = '', 3000);
-      },
-      async interact(action) {
-        if (this.loading) return;
-        this.loading = true;
-        this.error = '';
-        const el = this.$root;
-        const itemUid = el.dataset.itemUid;
-        const csrfToken = el.dataset.csrfToken;
-        const basePath = el.dataset.mountPath;
-        const prev = { liked: this.liked, boosted: this.boosted, boostCount: this.boostCount, likeCount: this.likeCount };
-        if (action === 'like') { this.liked = true; if (this.likeCount !== null) this.likeCount++; }
-        else if (action === 'unlike') { this.liked = false; if (this.likeCount !== null && this.likeCount > 0) this.likeCount--; }
-        else if (action === 'boost') { this.boosted = true; if (this.boostCount !== null) this.boostCount++; }
-        else if (action === 'unboost') { this.boosted = false; if (this.boostCount !== null && this.boostCount > 0) this.boostCount--; }
-        try {
-          const res = await fetch(basePath + '/admin/reader/' + action, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRF-Token': csrfToken
-            },
-            body: JSON.stringify({ url: itemUid })
-          });
-          const data = await res.json();
-          if (!data.success) {
-            this.liked = prev.liked;
-            this.boosted = prev.boosted;
-            this.boostCount = prev.boostCount;
-            this.likeCount = prev.likeCount;
-            this.error = data.error || 'Failed';
-          }
-        } catch (e) {
-          this.liked = prev.liked;
-          this.boosted = prev.boosted;
-          this.boostCount = prev.boostCount;
-          this.likeCount = prev.likeCount;
-          this.error = e.message;
-        }
-        this.loading = false;
-        if (this.error) setTimeout(() => this.error = '', 3000);
-      }
-    }">
+    data-liked="{{ 'true' if isLiked else 'false' }}"
+    data-boosted="{{ 'true' if isBoosted else 'false' }}"
+    data-like-count="{{ likeCount if likeCount != null else '' }}"
+    data-boost-count="{{ boostCount if boostCount != null else '' }}"
+    x-data="apCardInteraction()">
     <a href="{{ mountPath }}/admin/reader/compose?replyTo={{ (itemUrl or itemUid) | urlencode }}"
        class="ap-card__action ap-card__action--reply"
        title="{{ __('activitypub.reader.actions.reply') }}">
@@ -252,7 +149,7 @@
       :title="boosted ? '{{ __('activitypub.reader.actions.unboost') }}' : '{{ __('activitypub.reader.actions.boost') }}'"
       :disabled="loading"
       @click="interact(boosted ? 'unboost' : 'boost')">
-      🔁 <span x-text="boosted ? '{{ __('activitypub.reader.actions.boosted') }}' : '{{ __('activitypub.reader.actions.boost') }}'"></span><template x-if="boostCount !== null"><span class="ap-card__count" x-text="boostCount"></span></template>
+      <span aria-hidden="true">🔁</span> <span x-text="boosted ? '{{ __('activitypub.reader.actions.boosted') }}' : '{{ __('activitypub.reader.actions.boost') }}'"></span><template x-if="boostCount !== null"><span class="ap-card__count" x-text="boostCount"></span></template>
     </button>
     <button class="ap-card__action ap-card__action--like"
       :class="{ 'ap-card__action--active': liked }"
@@ -263,7 +160,7 @@
       <span x-text="liked ? '{{ __('activitypub.reader.actions.liked') }}' : '{{ __('activitypub.reader.actions.like') }}'"></span><template x-if="likeCount !== null"><span class="ap-card__count" x-text="likeCount"></span></template>
     </button>
     <a href="{{ itemUrl }}" class="ap-card__action ap-card__action--link" target="_blank" rel="noopener">
-      🔗 {{ __("activitypub.reader.actions.viewOriginal") }}
+      <span aria-hidden="true">🔗</span> {{ __("activitypub.reader.actions.viewOriginal") }}
     </a>
     {% if application.readlaterEndpoint %}
     <button class="ap-card__action ap-card__action--save"
@@ -275,7 +172,7 @@
       <span x-text="saved ? 'Saved' : 'Save'"></span>
     </button>
     {% endif %}
-    <div x-show="error" x-text="error" class="ap-card__action-error" x-transition></div>
+    <div x-show="error" x-text="error" class="ap-card__action-error" role="alert" x-transition></div>
   </footer>
   {# Close moderation content warning wrapper #}
   {% if item._moderated %}

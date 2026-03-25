@@ -1,0 +1,530 @@
+/* ==========================================================================
+   Explore Page
+   ========================================================================== */
+
+.ap-explore-header {
+  margin-bottom: var(--space-m);
+}
+
+.ap-explore-header__title {
+  font-size: var(--font-size-xl);
+  margin: 0 0 var(--space-xs);
+}
+
+.ap-explore-header__desc {
+  color: var(--color-on-offset);
+  font-size: var(--font-size-s);
+  margin: 0;
+}
+
+.ap-explore-form {
+  background: var(--color-offset);
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  margin-bottom: var(--space-m);
+  padding: var(--space-m);
+}
+
+.ap-explore-form__row {
+  align-items: center;
+  display: flex;
+  gap: var(--space-s);
+  flex-wrap: wrap;
+}
+
+.ap-explore-form__input {
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  box-sizing: border-box;
+  font-size: var(--font-size-m);
+  min-width: 0;
+  padding: var(--space-xs) var(--space-s);
+  width: 100%;
+}
+
+.ap-explore-form__scope {
+  display: flex;
+  gap: var(--space-s);
+}
+
+.ap-explore-form__scope-label {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-s);
+  gap: var(--space-xs);
+}
+
+.ap-explore-form__btn {
+  background: var(--color-primary);
+  border: none;
+  border-radius: var(--border-radius-small);
+  color: var(--color-on-primary);
+  cursor: pointer;
+  font-size: var(--font-size-s);
+  padding: var(--space-xs) var(--space-m);
+  white-space: nowrap;
+}
+
+.ap-explore-form__btn:hover {
+  opacity: 0.85;
+}
+
+.ap-explore-error {
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  border: var(--border-width-thin) solid var(--color-error);
+  border-radius: var(--border-radius-small);
+  color: var(--color-error);
+  margin-bottom: var(--space-m);
+  padding: var(--space-s) var(--space-m);
+}
+
+@media (max-width: 640px) {
+  .ap-explore-form__row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ap-explore-form__btn {
+    width: 100%;
+  }
+}
+
+/* ---------- Autocomplete dropdown ---------- */
+
+.ap-explore-autocomplete {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.ap-explore-autocomplete__dropdown {
+  background: var(--color-background);
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  box-shadow: 0 4px 12px hsl(var(--tint-neutral) 10% / 0.15);
+  left: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 100;
+}
+
+.ap-explore-autocomplete__item {
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--color-on-background);
+  cursor: pointer;
+  display: flex;
+  font-family: inherit;
+  font-size: var(--font-size-s);
+  gap: var(--space-s);
+  padding: var(--space-s) var(--space-m);
+  text-align: left;
+  width: 100%;
+}
+
+.ap-explore-autocomplete__item:hover,
+.ap-explore-autocomplete__item--highlighted {
+  background: var(--color-offset);
+}
+
+.ap-explore-autocomplete__domain {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.ap-explore-autocomplete__meta {
+  color: var(--color-on-offset);
+  display: flex;
+  flex: 1;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.ap-explore-autocomplete__software {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  border-radius: var(--border-radius-small);
+  font-size: var(--font-size-xs);
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.ap-explore-autocomplete__mau {
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.ap-explore-autocomplete__status {
+  flex-shrink: 0;
+  font-size: var(--font-size-s);
+}
+
+.ap-explore-autocomplete__checking {
+  opacity: 0.5;
+}
+
+/* ---------- Popular accounts autocomplete ---------- */
+
+.ap-lookup-autocomplete {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.ap-lookup-autocomplete__dropdown {
+  background: var(--color-background);
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  box-shadow: 0 4px 12px hsl(var(--tint-neutral) 10% / 0.15);
+  left: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 100;
+}
+
+.ap-lookup-autocomplete__item {
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--color-on-background);
+  cursor: pointer;
+  display: flex;
+  font-family: inherit;
+  font-size: var(--font-size-s);
+  gap: var(--space-s);
+  padding: var(--space-s) var(--space-m);
+  text-align: left;
+  width: 100%;
+}
+
+.ap-lookup-autocomplete__item:hover,
+.ap-lookup-autocomplete__item--highlighted {
+  background: var(--color-offset);
+}
+
+.ap-lookup-autocomplete__avatar {
+  border-radius: 50%;
+  flex-shrink: 0;
+  height: 28px;
+  object-fit: cover;
+  width: 28px;
+}
+
+.ap-lookup-autocomplete__info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ap-lookup-autocomplete__name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-lookup-autocomplete__handle {
+  color: var(--color-on-offset);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-lookup-autocomplete__followers {
+  color: var(--color-on-offset);
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   Explore: Tabbed Design
+   ========================================================================== */
+
+/* Tab bar wrapper: enables position:relative for fade gradient overlay */
+.ap-explore-tabs-container {
+  position: relative;
+}
+
+/* Tab bar with right-edge fade to indicate horizontal overflow */
+.ap-explore-tabs-nav {
+  padding-right: var(--space-l);
+  position: relative;
+}
+
+.ap-explore-tabs-nav::after {
+  background: linear-gradient(to right, transparent, var(--color-background) 80%);
+  content: "";
+  height: 100%;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 40px;
+}
+
+/* Tab wrapper: holds tab button + reorder/close controls together */
+.ap-tab-wrapper {
+  align-items: stretch;
+  display: inline-flex;
+  position: relative;
+}
+
+/* Show controls on hover or when the tab is active */
+.ap-tab-controls {
+  align-items: center;
+  display: none;
+  gap: 1px;
+}
+
+.ap-tab-wrapper:hover .ap-tab-controls,
+.ap-tab-wrapper:focus-within .ap-tab-controls {
+  display: flex;
+}
+
+/* Individual control buttons (↑ ↓ ×) */
+.ap-tab-control {
+  background: none;
+  border: none;
+  color: var(--color-on-offset);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.ap-tab-control:hover {
+  color: var(--color-on-background);
+}
+
+.ap-tab-control:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
+.ap-tab-control--remove {
+  color: var(--color-on-offset);
+  font-size: var(--font-size-s);
+}
+
+.ap-tab-control--remove:hover {
+  color: var(--color-error);
+}
+
+/* Truncate long domain names in tab labels */
+.ap-tab__label {
+  display: inline-block;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Scope badges on instance tabs */
+.ap-tab__badge {
+  border-radius: var(--border-radius-small);
+  font-size: 0.65em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-left: var(--space-xs);
+  padding: 1px 4px;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.ap-tab__badge--local {
+  background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+  color: var(--color-primary-on-background);
+}
+
+.ap-tab__badge--federated {
+  background: color-mix(in srgb, var(--color-purple45) 15%, transparent);
+  color: var(--color-purple45);
+}
+
+/* +# button for adding hashtag tabs */
+.ap-tab--add {
+  font-family: monospace;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+
+/* Inline hashtag form that appears when +# is clicked */
+.ap-tab-add-hashtag {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--space-xs);
+}
+
+.ap-tab-hashtag-form {
+  align-items: center;
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.ap-tab-hashtag-form__prefix {
+  color: var(--color-on-offset);
+  font-weight: 600;
+}
+
+.ap-tab-hashtag-form__input {
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  font-family: inherit;
+  font-size: var(--font-size-s);
+  padding: 2px var(--space-s);
+  width: 8em;
+}
+
+.ap-tab-hashtag-form__input:focus {
+  border-color: var(--color-primary);
+  outline: 2px solid var(--color-primary);
+  outline-offset: -1px;
+}
+
+.ap-tab-hashtag-form__btn {
+  background: var(--color-primary);
+  border: none;
+  border-radius: var(--border-radius-small);
+  color: var(--color-on-primary);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-s);
+  padding: 2px var(--space-s);
+  white-space: nowrap;
+}
+
+.ap-tab-hashtag-form__btn:hover {
+  opacity: 0.85;
+}
+
+/* "Pin as tab" button in search results area */
+.ap-explore-pin-bar {
+  margin-bottom: var(--space-s);
+}
+
+.ap-explore-pin-btn {
+  background: none;
+  border: var(--border-width-thin) solid var(--color-primary-on-background);
+  border-radius: var(--border-radius-small);
+  color: var(--color-primary-on-background);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-s);
+  padding: var(--space-xs) var(--space-m);
+}
+
+.ap-explore-pin-btn:hover {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.ap-explore-pin-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Hashtag form row inside the search form */
+.ap-explore-form__hashtag-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-s);
+}
+
+.ap-explore-form__hashtag-label {
+  color: var(--color-on-offset);
+  font-size: var(--font-size-s);
+  white-space: nowrap;
+}
+
+.ap-explore-form__hashtag-prefix {
+  color: var(--color-on-offset);
+  font-weight: 600;
+}
+
+.ap-explore-form__hashtag-hint {
+  color: var(--color-on-offset);
+  font-size: var(--font-size-xs);
+  flex-basis: 100%;
+}
+
+.ap-explore-form__input--hashtag {
+  max-width: 200px;
+  width: auto;
+}
+
+/* Tab panel containers */
+.ap-explore-instance-panel,
+.ap-explore-hashtag-panel {
+  min-height: 120px;
+}
+
+/* Loading state */
+.ap-explore-tab-loading {
+  align-items: center;
+  color: var(--color-on-offset);
+  display: flex;
+  justify-content: center;
+  padding: var(--space-xl);
+}
+
+.ap-explore-tab-loading--more {
+  padding-block: var(--space-m);
+}
+
+.ap-explore-tab-loading__text {
+  font-size: var(--font-size-s);
+}
+
+/* Error state */
+.ap-explore-tab-error {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s);
+  padding: var(--space-xl);
+}
+
+.ap-explore-tab-error__message {
+  color: var(--color-error);
+  font-size: var(--font-size-s);
+  margin: 0;
+}
+
+.ap-explore-tab-error__retry {
+  background: none;
+  border: var(--border-width-thin) solid var(--color-primary-on-background);
+  border-radius: var(--border-radius-small);
+  color: var(--color-primary-on-background);
+  cursor: pointer;
+  font-size: var(--font-size-s);
+  padding: var(--space-xs) var(--space-s);
+}
+
+.ap-explore-tab-error__retry:hover {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+/* Empty state */
+.ap-explore-tab-empty {
+  color: var(--color-on-offset);
+  font-size: var(--font-size-s);
+  padding: var(--space-xl);
+  text-align: center;
+}
+
+/* Infinite scroll sentinel — zero height, invisible */
+.ap-tab-sentinel {
+  height: 1px;
+  visibility: hidden;
+}

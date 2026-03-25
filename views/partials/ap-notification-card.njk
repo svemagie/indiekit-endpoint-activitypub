@@ -14,7 +14,7 @@
     <img src="{{ item.actorPhoto }}" alt="{{ item.actorName }}" class="ap-notification__avatar" loading="lazy" crossorigin="anonymous">
     {% endif %}
     <span class="ap-notification__avatar ap-notification__avatar--default" aria-hidden="true">{{ item.actorName[0] | upper if item.actorName else "?" }}</span>
-    <span class="ap-notification__type-badge">
+    <span class="ap-notification__type-badge" aria-hidden="true">
       {% if item.type == "like" %}❤{% elif item.type == "boost" %}🔁{% elif item.type == "follow" or item.type == "follow_request" %}👤{% elif item.type == "reply" %}💬{% elif item.type == "mention" %}@{% elif item.type == "dm" %}✉{% elif item.type == "report" %}⚑{% endif %}
     </span>
   </div>

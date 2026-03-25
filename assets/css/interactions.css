@@ -1,0 +1,236 @@
+/* ==========================================================================
+   Tags
+   ========================================================================== */
+
+.ap-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-s);
+}
+
+.ap-card__tag {
+  background: var(--color-offset-variant);
+  border-radius: var(--border-radius-large);
+  color: var(--color-on-offset);
+  font-size: var(--font-size-s);
+  padding: 2px var(--space-xs);
+  text-decoration: none;
+}
+
+.ap-card__tag:hover {
+  background: var(--color-offset-variant-darker);
+  color: var(--color-on-background);
+}
+
+.ap-card__mention {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  border-radius: var(--border-radius-large);
+  color: var(--color-primary-on-background);
+  font-size: var(--font-size-s);
+  padding: 2px var(--space-xs);
+  text-decoration: none;
+}
+
+.ap-card__mention:hover {
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  color: var(--color-primary-on-background);
+}
+
+.ap-card__mention--legacy {
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* Hashtag stuffing collapse */
+.ap-hashtag-overflow {
+  margin: var(--space-xs) 0;
+  font-size: var(--font-size-s);
+}
+
+.ap-hashtag-overflow summary {
+  cursor: pointer;
+  color: var(--color-on-offset);
+  list-style: none;
+}
+
+.ap-hashtag-overflow summary::before {
+  content: "▸ ";
+}
+
+.ap-hashtag-overflow[open] summary::before {
+  content: "▾ ";
+}
+
+.ap-hashtag-overflow p {
+  margin-top: var(--space-xs);
+}
+
+/* ==========================================================================
+   Interaction Buttons
+   ========================================================================== */
+
+.ap-card__actions {
+  border-top: var(--border-width-thin) solid var(--color-outline);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-top: var(--space-s);
+}
+
+.ap-card__action {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--border-radius-small);
+  color: var(--color-on-offset);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: var(--font-size-s);
+  gap: 0.3em;
+  min-height: 36px;
+  padding: 0.25em 0.6em;
+  text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.ap-card__action:hover {
+  background: var(--color-offset-variant);
+  color: var(--color-on-background);
+}
+
+/* Color-coded hover states per action type */
+.ap-card__action--reply:hover {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+.ap-card__action--boost:hover {
+  background: color-mix(in srgb, var(--color-green50) 12%, transparent);
+  color: var(--color-green50);
+}
+
+.ap-card__action--like:hover {
+  background: color-mix(in srgb, var(--color-red45) 12%, transparent);
+  color: var(--color-red45);
+}
+
+.ap-card__action--link:hover {
+  background: var(--color-offset-variant);
+  color: var(--color-on-background);
+}
+
+.ap-card__action--save:hover {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+/* Active interaction states */
+.ap-card__action--like.ap-card__action--active {
+  background: color-mix(in srgb, var(--color-red45) 12%, transparent);
+  color: var(--color-red45);
+}
+
+.ap-card__action--boost.ap-card__action--active {
+  background: color-mix(in srgb, var(--color-green50) 12%, transparent);
+  color: var(--color-green50);
+}
+
+.ap-card__action--save.ap-card__action--active {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+.ap-card__action:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+/* Interaction counts */
+.ap-card__count {
+  font-size: var(--font-size-xs);
+  color: inherit;
+  opacity: 0.7;
+  margin-left: 0.1em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Error message */
+.ap-card__action-error {
+  color: var(--color-error);
+  font-size: var(--font-size-s);
+  width: 100%;
+}
+
+/* ==========================================================================
+   Pagination
+   ========================================================================== */
+
+.ap-pagination {
+  border-top: var(--border-width-thin) solid var(--color-outline);
+  display: flex;
+  gap: var(--space-m);
+  justify-content: space-between;
+  margin-top: var(--space-m);
+  padding-top: var(--space-m);
+}
+
+.ap-pagination a {
+  color: var(--color-primary-on-background);
+  text-decoration: none;
+}
+
+.ap-pagination a:hover {
+  text-decoration: underline;
+}
+
+/* Hidden once Alpine is active (JS replaces with infinite scroll) */
+.ap-pagination--js-hidden {
+  /* Shown by default for no-JS fallback — Alpine hides via display:none */
+}
+
+/* ==========================================================================
+   Infinite Scroll / Load More
+   ========================================================================== */
+
+.ap-load-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-s);
+  padding: var(--space-m) 0;
+}
+
+.ap-load-more__sentinel {
+  height: 1px;
+  width: 100%;
+}
+
+.ap-load-more__btn {
+  background: var(--color-offset);
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  color: var(--color-on-background);
+  cursor: pointer;
+  font-size: var(--font-size-s);
+  padding: var(--space-xs) var(--space-m);
+  transition: background 0.15s;
+}
+
+.ap-load-more__btn:hover:not(:disabled) {
+  background: var(--color-offset-variant);
+}
+
+.ap-load-more__btn:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.ap-load-more__done {
+  color: var(--color-on-offset);
+  font-size: var(--font-size-s);
+  margin: 0;
+  text-align: center;
+}

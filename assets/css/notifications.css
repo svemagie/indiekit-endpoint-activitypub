@@ -1,0 +1,191 @@
+/* ==========================================================================
+   Notifications
+   ========================================================================== */
+
+/* Notifications Toolbar */
+.ap-notifications__toolbar {
+  display: flex;
+  gap: var(--space-s);
+  margin-bottom: var(--space-m);
+}
+
+.ap-notifications__btn {
+  background: var(--color-offset);
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  color: var(--color-on-background);
+  cursor: pointer;
+  font-size: var(--font-size-s);
+  padding: var(--space-xs) var(--space-m);
+  transition: all 0.2s ease;
+}
+
+.ap-notifications__btn:hover {
+  background: var(--color-offset-variant);
+  border-color: var(--color-outline-variant);
+}
+
+.ap-notifications__btn--danger {
+  color: var(--color-error);
+}
+
+.ap-notifications__btn--danger:hover {
+  border-color: var(--color-error);
+}
+
+.ap-notification {
+  align-items: flex-start;
+  background: var(--color-offset);
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  display: flex;
+  gap: var(--space-s);
+  padding: var(--space-m);
+  position: relative;
+}
+
+.ap-notification--unread {
+  border-color: var(--color-yellow50);
+  box-shadow: 0 0 8px 0 hsl(var(--tint-yellow) 50% / 0.3);
+}
+
+.ap-notification__avatar-wrap {
+  flex-shrink: 0;
+  position: relative;
+}
+
+.ap-notification__avatar-wrap {
+  height: 40px;
+  width: 40px;
+}
+
+.ap-notification__avatar {
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: 50%;
+  height: 40px;
+  object-fit: cover;
+  width: 40px;
+}
+
+.ap-notification__avatar-wrap > img {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.ap-notification__avatar--default {
+  align-items: center;
+  background: var(--color-offset-variant);
+  color: var(--color-on-offset);
+  display: inline-flex;
+  font-size: 1.1em;
+  font-weight: 600;
+  justify-content: center;
+}
+
+.ap-notification__type-badge {
+  bottom: -2px;
+  font-size: 0.75em;
+  position: absolute;
+  right: -4px;
+}
+
+.ap-notification__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ap-notification__actor {
+  font-weight: 600;
+}
+
+.ap-notification__action {
+  color: var(--color-on-offset);
+}
+
+.ap-notification__target {
+  color: var(--color-on-offset);
+  display: block;
+  font-size: var(--font-size-s);
+  margin-top: var(--space-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-notification__excerpt {
+  background: var(--color-offset-variant);
+  border-radius: var(--border-radius-small);
+  font-size: var(--font-size-s);
+  margin-top: var(--space-xs);
+  padding: var(--space-xs) var(--space-s);
+}
+
+.ap-notification__time {
+  color: var(--color-on-offset);
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+}
+
+.ap-notification__dismiss {
+  position: absolute;
+  right: var(--space-xs);
+  top: var(--space-xs);
+}
+
+.ap-notification__dismiss-btn {
+  background: transparent;
+  border: 0;
+  border-radius: var(--border-radius-small);
+  color: var(--color-on-offset);
+  cursor: pointer;
+  font-size: var(--font-size-m);
+  line-height: 1;
+  padding: 2px 6px;
+  transition: all 0.2s ease;
+}
+
+.ap-notification__dismiss-btn:hover {
+  background: var(--color-offset-variant);
+  color: var(--color-error);
+}
+
+.ap-notification__actions {
+  display: flex;
+  gap: var(--space-s);
+  margin-top: var(--space-s);
+}
+
+.ap-notification__reply-btn,
+.ap-notification__thread-btn {
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  color: var(--color-on-offset);
+  font-size: var(--font-size-s);
+  padding: var(--space-xs) var(--space-s);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.ap-notification__reply-btn:hover,
+.ap-notification__thread-btn:hover {
+  background: var(--color-offset-variant);
+  border-color: var(--color-outline-variant);
+  color: var(--color-on-background);
+}
+
+.ap-notification__handle {
+  color: var(--color-on-offset);
+  font-size: var(--font-size-s);
+  margin-left: var(--space-xs);
+}
+
+.ap-notifications__btn--primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary, #fff);
+  text-decoration: none;
+}
+
+.ap-notifications__btn--primary:hover {
+  opacity: 0.9;
+}

@@ -618,6 +618,37 @@ curl -s "https://rmendes.net/nodeinfo/2.1" | jq .
 - `@_followback@tags.pub` does not send Follow activities back despite accepting ours
 - Both suggest tags.pub's outbound delivery is broken — zero inbound requests from `activitypub-bot` user-agent have been observed
 
+## Form Handling Convention
+
+Two form patterns are used in this plugin. New forms should follow the appropriate pattern.
+
+### Pattern 1: Traditional POST (data mutation forms)
+
+Used for: compose, profile editor, migration alias, notification mark-read/clear.
+
+- Standard `<form method="POST" action="...">`
+- CSRF via `<input type="hidden" name="_csrf" value="...">`
+- Server processes, then redirects (PRG pattern)
+- Success/error feedback via Indiekit's notification banner system
+- Uses Indiekit form macros (`input`, `textarea`, `button`) where available
+
+### Pattern 2: Alpine.js Fetch (in-page CRUD operations)
+
+Used for: moderation add/remove keyword/server, tab management, federation actions.
+
+- Alpine.js `@submit.prevent` or `@click` handlers
+- CSRF via `X-CSRF-Token` header in `fetch()` call
+- Inline error display with `x-show="error"` and `role="alert"`
+- Optimistic UI with rollback on failure
+- No page reload — DOM updates in place
+
+### Rules
+
+- Do NOT mix patterns on the same page (one pattern per form)
+- All forms MUST include CSRF protection (hidden field OR header)
+- Error feedback: Pattern 1 uses redirect + banner, Pattern 2 uses inline `x-show="error"`
+- Success feedback: Pattern 1 uses redirect + banner, Pattern 2 uses inline DOM update or element removal
+
 ## CSS Conventions
 
 The reader CSS (`assets/reader.css`) uses Indiekit's theme custom properties for automatic dark mode support:
