@@ -129,7 +129,7 @@ Inbound:  Remote inbox POST → Fedify → inbox-listeners.js → ap_inbox_queue
 Reader:   Followed account posts → Create inbox → timeline-store → ap_timeline → reader UI
 Explore:  Public Mastodon API → fetchMastodonTimeline() → mapMastodonToItem() → explore UI
 Mastodon: Client (Phanpy/Elk/Moshidon) → /api/v1/* → ap_timeline + Fedify → JSON responses
-          POST /api/v1/statuses → Micropub pipeline → content file + ap_timeline + AP syndication
+          POST /api/v1/statuses → Micropub pipeline → content file → Eleventy rebuild → syndication → AP delivery
 
 All views (reader, explore, tag timeline, hashtag explore, API endpoints) share a single
 processing pipeline via item-processing.js:
@@ -420,16 +420,17 @@ The Mastodon Client API is mounted at `/` (domain root) via `Indiekit.addEndpoin
 - **Unsigned fallback** — `lookupWithSecurity()` tries authenticated (signed) GET first, falls back to unsigned if it fails. Some servers (tags.pub) reject signed GETs with 400.
 - **Backfill** — `backfill-timeline.js` runs on startup, converts Micropub posts → `ap_timeline` format with content synthesis (bookmarks → "Bookmarked: URL"), hashtag extraction, and absolute URL resolution.
 
-### 35. Mastodon API — Content Processing
+### 35. Mastodon API — Content Processing (v3.9.4+)
 
 When creating posts via `POST /api/v1/statuses`:
-- Bare URLs are linkified to `<a>` tags
-- `@user@domain` mentions are converted to profile links with `h-card` markup
-- Mentions are extracted into `mentions[]` array with name and URL
-- Hashtags are extracted from content text and merged with Micropub categories
-- Content is stored in `ap_timeline` immediately (visible in Mastodon API)
-- Content file is created via Micropub pipeline (visible on website after Eleventy rebuild)
-- Relative media URLs are resolved to absolute using the publication URL
+- Content is provided to Micropub as `{ text, html }` with pre-linkified URLs (Micropub's markdown-it doesn't have `linkify: true`)
+- `@user@domain` mentions are preserved as plain text — the AP syndicator resolves them via WebFinger for federation delivery
+- Content warnings use `content-warning` field (not `summary`) to match the native reader and AP syndicator expectations
+- No `ap_timeline` entry is created — the post appears in the timeline after the syndication round-trip (Eleventy rebuild → syndication webhook → AP delivery → inbox)
+- A minimal Mastodon Status object is returned immediately to the client for UI feedback
+- `mp-syndicate-to` is set to the AP syndicator UID (posts from Mastodon clients syndicate to fediverse only)
+
+**Previous behavior (pre-3.9.4):** The handler created an `ap_timeline` entry immediately and used `processStatusContent()` to linkify URLs with hardcoded `/@username` patterns. This caused: (1) posts appearing in timeline before syndication, (2) broken mention URLs for non-Mastodon servers, (3) links lost in the Micropub content file.
 
 ## Date Handling Convention
 
