@@ -547,6 +547,22 @@ On restart, `refollow:pending` entries are reset to `import` to prevent stale cl
 | `unfurl.js` | Open Graph metadata extraction for link previews |
 | `express` | Route handling (peer: Indiekit provides it) |
 
+## Standards Compliance
+
+| FEP | Name | Status | Implementation |
+|-----|------|--------|----------------|
+| FEP-8b32 | Object Integrity Proofs | Full | Fedify signs all outbound activities with Ed25519 |
+| FEP-521a | Multiple key pairs (Multikey) | Full | RSA for HTTP Signatures + Ed25519 for OIP |
+| FEP-fe34 | Origin-based security | Full | `lookupWithSecurity()` in `lookup-helpers.js` |
+| FEP-8fcf | Collection Sync | Outbound | `syncCollection: true` on `sendActivity()` — receiving side NOT implemented |
+| FEP-5feb | Search indexing consent | Full | `indexable: true`, `discoverable: true` on actor in `federation-setup.js` |
+| FEP-f1d5 | Enhanced NodeInfo | Full | `setNodeInfoDispatcher()` in `federation-setup.js` |
+| FEP-4f05 | Soft delete / Tombstone | Full | `lib/storage/tombstones.js` + 410 in `contentNegotiationRoutes` |
+| FEP-3b86 | Activity Intents | Full | WebFinger links + `authorize-interaction.js` intent routing |
+| FEP-044f | Quote posts | Full | `quoteUrl` extraction + `ap-quote-embed.njk` rendering |
+| FEP-c0e0 | Emoji reactions | Vocab only | Fedify provides `EmojiReact` class, no UI in plugin |
+| FEP-5711 | Conversation threads | Vocab only | Fedify provides threading vocab |
+
 ## Configuration Options
 
 ```javascript

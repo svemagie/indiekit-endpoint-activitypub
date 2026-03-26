@@ -110,12 +110,33 @@ ActivityPub federation endpoint for [Indiekit](https://getindiekit.com), built o
 - Federation management page with moderation overview (blocked servers, blocked accounts, muted)
 
 **Standards Compliance**
-- FEP-5feb: Search Indexing Consent — actor advertises `indexable` and `discoverable` properties
-- FEP-f1d5/0151: Enhanced NodeInfo 2.1 — rich metadata including software repository, node name, staff accounts
-- FEP-4f05: Soft Delete with Tombstone — deleted posts return 410 with Tombstone JSON-LD including `formerType` and timestamps
-- FEP-3b86: Activity Intents — WebFinger links for Follow, Create, Like, Announce intents with authorize_interaction routing
-- FEP-8fcf: Collection Synchronization — outbound follower digest headers via Fedify `syncCollection`
-- FEP-044f: Quote Posts — rendered as embedded cards (via Fedify's `quoteUrl` support)
+
+Core protocols and Fediverse Enhancement Proposals (FEPs) supported:
+
+| Standard | Name | Status | Provider |
+|----------|------|--------|----------|
+| [ActivityPub](https://www.w3.org/TR/activitypub/) | W3C ActivityPub | Full (server-to-server) | Fedify 2.1 |
+| [ActivityStreams 2.0](https://www.w3.org/TR/activitystreams-core/) | W3C Activity Streams | Full | Fedify 2.1 |
+| [HTTP Signatures](https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures) | draft-cavage HTTP Signatures | Full | Fedify 2.1 |
+| [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421) | HTTP Message Signatures | Full (with Accept-Signature negotiation) | Fedify 2.1 |
+| [WebFinger](https://www.rfc-editor.org/rfc/rfc7033) | RFC 7033 WebFinger | Full | Fedify 2.1 |
+| [NodeInfo 2.1](https://nodeinfo.diaspora.software/) | Server metadata discovery | Full (enriched) | Plugin |
+| [FEP-8b32](https://w3id.org/fep/8b32) | Object Integrity Proofs (Ed25519) | Full | Fedify 2.1 |
+| [FEP-521a](https://w3id.org/fep/521a) | Multiple key pairs (Multikey) | Full | Fedify 2.1 |
+| [FEP-fe34](https://w3id.org/fep/fe34) | Origin-based security model | Full | Fedify 2.1 + Plugin |
+| [FEP-8fcf](https://w3id.org/fep/8fcf) | Followers collection synchronization | Outbound only | Fedify 2.1 |
+| [FEP-5feb](https://w3id.org/fep/5feb) | Search indexing consent | Full (`indexable`, `discoverable`) | Plugin |
+| [FEP-f1d5](https://w3id.org/fep/f1d5) | Enhanced NodeInfo 2.1 | Full (metadata, staff accounts) | Plugin |
+| [FEP-4f05](https://w3id.org/fep/4f05) | Soft delete with Tombstone | Full (410 + Tombstone JSON-LD) | Plugin |
+| [FEP-3b86](https://w3id.org/fep/3b86) | Activity Intents | Full (Follow, Create, Like, Announce) | Plugin |
+| [FEP-044f](https://w3id.org/fep/044f) | Quote posts | Full (Mastodon, Misskey, Fedibird formats) | Fedify 2.1 + Plugin |
+| [FEP-c0e0](https://w3id.org/fep/c0e0) | Emoji reactions (EmojiReact) | Vocab support (no UI) | Fedify 2.1 |
+| [FEP-5711](https://w3id.org/fep/5711) | Conversation threads | Vocab support | Fedify 2.1 |
+| [Linked Data Signatures](https://w3c-dvcg.github.io/ld-signatures/) | RsaSignature2017 (legacy) | Full (outbound signing) | Fedify 2.1 |
+
+**Status key:** *Full* = complete implementation, *Outbound only* = sending side only, *Vocab support* = types available but no dedicated UI/logic.
+
+**Provider key:** *Fedify 2.1* = handled by the Fedify framework, *Plugin* = implemented in this plugin, *Fedify 2.1 + Plugin* = framework provides primitives, plugin wires them together.
 
 ## Requirements
 
