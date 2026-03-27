@@ -101,6 +101,7 @@
       data-tab="{{ tab }}"
       data-mount-path="{{ mountPath }}"
       x-show="count > 0"
+      role="status"
       x-cloak>
       <button class="ap-new-posts-banner__btn" @click="loadNew()">
         <span x-text="count + ' new post' + (count !== 1 ? 's' : '')"></span> — Load
@@ -167,7 +168,7 @@
         <button class="ap-load-more__btn" @click="loadMore()" :disabled="loading" x-show="!done && !loading">
           {{ __("activitypub.reader.pagination.loadMore") }}
         </button>
-        <div class="ap-skeleton-group" x-show="loading" x-cloak>
+        <div class="ap-skeleton-group" x-show="loading" aria-live="polite" x-cloak>
           {% include "partials/ap-skeleton-card.njk" %}
           {% include "partials/ap-skeleton-card.njk" %}
           {% include "partials/ap-skeleton-card.njk" %}

@@ -1,0 +1,20 @@
+{# Shared content rendering — included in both CW and non-CW paths #}
+{% if item.content and item.content.html %}
+  <div class="ap-card__content">
+    {{ item.content.html | safe }}
+  </div>
+{% endif %}
+
+{# Quoted post embed #}
+{% include "partials/ap-quote-embed.njk" %}
+
+{# Link previews #}
+{% include "partials/ap-link-preview.njk" %}
+
+{# Media attachments #}
+{% include "partials/ap-item-media.njk" %}
+
+{# Poll options #}
+{% if item.type == "question" or (item.pollOptions and item.pollOptions.length > 0) %}
+  {% include "partials/ap-poll-options.njk" %}
+{% endif %}

@@ -1,0 +1,144 @@
+/**
+ * ActivityPub Reader Styles
+ * Card-based layout inspired by Phanpy/Elk
+ * Uses Indiekit CSS custom properties for automatic dark mode support
+ */
+
+/* ==========================================================================
+   Breadcrumb Navigation
+   ========================================================================== */
+
+.ap-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-m);
+  font-size: var(--font-size-s);
+  color: var(--color-on-offset);
+}
+
+.ap-breadcrumb a {
+  color: var(--color-primary-on-background);
+  text-decoration: none;
+}
+
+.ap-breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.ap-breadcrumb__separator {
+  color: var(--color-on-offset);
+}
+
+.ap-breadcrumb__current {
+  color: var(--color-on-background);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Fediverse Lookup
+   ========================================================================== */
+
+.ap-lookup {
+  display: flex;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-m);
+}
+
+.ap-lookup__input {
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  background: var(--color-offset);
+  box-sizing: border-box;
+  color: var(--color-on-background);
+  font-family: inherit;
+  font-size: var(--font-size-m);
+  padding: var(--space-s) var(--space-m);
+  width: 100%;
+}
+
+.ap-lookup__input::placeholder {
+  color: var(--color-on-offset);
+}
+
+.ap-lookup__input:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -1px;
+  border-color: var(--color-primary);
+}
+
+.ap-lookup__btn {
+  padding: var(--space-s) var(--space-m);
+  border: var(--border-width-thin) solid var(--color-primary);
+  border-radius: var(--border-radius-small);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--font-size-m);
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ap-lookup__btn:hover {
+  opacity: 0.9;
+}
+
+/* ==========================================================================
+   Tab Navigation
+   ========================================================================== */
+
+.ap-tabs {
+  border-bottom: var(--border-width-thin) solid var(--color-outline);
+  display: flex;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-m);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ap-tab {
+  border-bottom: var(--border-width-thick) solid transparent;
+  color: var(--color-on-offset);
+  font-size: var(--font-size-m);
+  padding: var(--space-s) var(--space-m);
+  text-decoration: none;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
+  white-space: nowrap;
+}
+
+.ap-tab:hover {
+  color: var(--color-on-background);
+}
+
+.ap-tab--active {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-primary-on-background);
+  font-weight: 600;
+}
+
+.ap-tab__count {
+  background: var(--color-offset-variant);
+  border-radius: var(--border-radius-large);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  margin-left: var(--space-xs);
+  padding: 1px 6px;
+}
+
+.ap-tab--active .ap-tab__count {
+  background: var(--color-primary);
+  color: var(--color-on-primary, var(--color-neutral99));
+}
+
+/* ==========================================================================
+   Timeline Layout
+   ========================================================================== */
+
+.ap-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-m);
+}

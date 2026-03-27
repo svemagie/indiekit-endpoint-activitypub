@@ -14,15 +14,19 @@ An Indiekit plugin that adds full ActivityPub federation via [Fedify](https://fe
 ## Architecture Overview
 
 ```
-index.js                          ← Plugin entry, route registration, syndicator
+index.js                          ← Plugin entry, route registration, lifecycle orchestration
 ├── lib/federation-setup.js       ← Fedify Federation instance, dispatchers, collections
 ├── lib/federation-bridge.js      ← Express ↔ Fedify request/response bridge
+├── lib/federation-actions.js     ← Facade for controller federation access (context creation, actor resolution)
 ├── lib/inbox-listeners.js        ← Fedify inbox listener registration + reply forwarding
 ├── lib/inbox-handlers.js         ← Async inbox activity handlers (Create, Like, Announce, etc.)
 ├── lib/inbox-queue.js            ← Persistent MongoDB-backed async inbox processing queue
 ├── lib/outbox-failure.js         ← Outbox delivery failure handling (410 cleanup, 404 strikes, strike reset)
+├── lib/batch-broadcast.js        ← Shared batch delivery to followers (dedup, batching, logging)
 ├── lib/jf2-to-as2.js             ← JF2 → ActivityStreams conversion (plain JSON + Fedify vocab)
+├── lib/syndicator.js             ← Indiekit syndicator factory (JF2→AS2, mention resolution, delivery)
 ├── lib/kv-store.js               ← MongoDB-backed KvStore for Fedify (get/set/delete/list)
+├── lib/init-indexes.js           ← MongoDB index creation (idempotent startup)
 ├── lib/activity-log.js           ← Activity logging to ap_activities
 ├── lib/item-processing.js        ← Unified item processing pipeline (moderation, quotes, interactions, rendering)
 ├── lib/timeline-store.js         ← Timeline item extraction + sanitization
@@ -117,14 +121,15 @@ index.js                          ← Plugin entry, route registration, syndicat
 ## Data Flow
 
 ```
-Outbound: Indiekit post → syndicator.syndicate() → jf2ToAS2Activity() → ctx.sendActivity() → follower inboxes
+Outbound: Indiekit post → syndicator.js syndicate() → jf2ToAS2Activity() → ctx.sendActivity() → follower inboxes
+          Broadcast (Update/Delete) → batch-broadcast.js → deduplicated shared inbox delivery
           Delivery failure → outbox-failure.js → 410: full cleanup | 404: strike system → eventual cleanup
 Inbound:  Remote inbox POST → Fedify → inbox-listeners.js → ap_inbox_queue → inbox-handlers.js → MongoDB
           Reply forwarding: inbox-listeners.js checks if reply is to our post → ctx.forwardActivity() → follower inboxes
 Reader:   Followed account posts → Create inbox → timeline-store → ap_timeline → reader UI
 Explore:  Public Mastodon API → fetchMastodonTimeline() → mapMastodonToItem() → explore UI
 Mastodon: Client (Phanpy/Elk/Moshidon) → /api/v1/* → ap_timeline + Fedify → JSON responses
-          POST /api/v1/statuses → Micropub pipeline → content file + ap_timeline + AP syndication
+          POST /api/v1/statuses → Micropub pipeline → content file → Eleventy rebuild → syndication → AP delivery
 
 All views (reader, explore, tag timeline, hashtag explore, API endpoints) share a single
 processing pipeline via item-processing.js:
@@ -156,6 +161,7 @@ processing pipeline via item-processing.js:
 | `ap_blocked_servers` | Blocked server domains | `hostname` (unique) |
 | `ap_key_freshness` | Remote actor key verification timestamps | `actorUrl` (unique), `lastVerifiedAt` |
 | `ap_inbox_queue` | Persistent async inbox queue | `activityId`, `status`, `enqueuedAt` |
+| `ap_tombstones` | Tombstone records for soft-deleted posts (FEP-4f05) | `url` (unique) |
 | `ap_oauth_apps` | Mastodon API client registrations | `clientId` (unique), `clientSecret`, `redirectUris` |
 | `ap_oauth_tokens` | OAuth2 authorization codes + access tokens | `code` (unique sparse), `accessToken` (unique sparse) |
 | `ap_markers` | Read position markers (Mastodon API) | `userId`, `timeline` |
@@ -214,12 +220,11 @@ Express 5 removed the `"back"` magic keyword from `response.redirect()`. It's tr
 
 JSON-LD compaction collapses single-element arrays to plain objects. Mastodon's `update_account_fields` checks `attachment.is_a?(Array)` and silently skips if it's not an array. `sendFedifyResponse()` in `federation-bridge.js` forces `attachment` to always be an array.
 
-### 10. WORKAROUND: Endpoints `as:Endpoints` Type Stripping
+### 10. REMOVED: Endpoints `as:Endpoints` Type Stripping (Fixed in Fedify 2.1.0)
 
-**File:** `lib/federation-bridge.js` (in `sendFedifyResponse()`)
 **Upstream issue:** [fedify#576](https://github.com/fedify-dev/fedify/issues/576) — FIXED in Fedify 2.1.0
-**Workaround:** `delete json.endpoints.type` strips the invalid `"type": "as:Endpoints"` from actor JSON.
-**Remove when:** Upgrading to Fedify ≥ 2.1.0.
+**Previous workaround** in `federation-bridge.js` — **REMOVED**.
+Fedify 2.1.0 now omits the invalid `"type": "as:Endpoints"` from serialized actor JSON. No workaround needed.
 
 ### 11. KNOWN ISSUE: PropertyValue Attachment Type Validation
 
@@ -415,16 +420,17 @@ The Mastodon Client API is mounted at `/` (domain root) via `Indiekit.addEndpoin
 - **Unsigned fallback** — `lookupWithSecurity()` tries authenticated (signed) GET first, falls back to unsigned if it fails. Some servers (tags.pub) reject signed GETs with 400.
 - **Backfill** — `backfill-timeline.js` runs on startup, converts Micropub posts → `ap_timeline` format with content synthesis (bookmarks → "Bookmarked: URL"), hashtag extraction, and absolute URL resolution.
 
-### 35. Mastodon API — Content Processing
+### 35. Mastodon API — Content Processing (v3.9.4+)
 
 When creating posts via `POST /api/v1/statuses`:
-- Bare URLs are linkified to `<a>` tags
-- `@user@domain` mentions are converted to profile links with `h-card` markup
-- Mentions are extracted into `mentions[]` array with name and URL
-- Hashtags are extracted from content text and merged with Micropub categories
-- Content is stored in `ap_timeline` immediately (visible in Mastodon API)
-- Content file is created via Micropub pipeline (visible on website after Eleventy rebuild)
-- Relative media URLs are resolved to absolute using the publication URL
+- Content is provided to Micropub as `{ text, html }` with pre-linkified URLs (Micropub's markdown-it doesn't have `linkify: true`)
+- `@user@domain` mentions are preserved as plain text — the AP syndicator resolves them via WebFinger for federation delivery
+- Content warnings use `content-warning` field (not `summary`) to match the native reader and AP syndicator expectations
+- No `ap_timeline` entry is created — the post appears in the timeline after the syndication round-trip (Eleventy rebuild → syndication webhook → AP delivery → inbox)
+- A minimal Mastodon Status object is returned immediately to the client for UI feedback
+- `mp-syndicate-to` is set to the AP syndicator UID (posts from Mastodon clients syndicate to fediverse only)
+
+**Previous behavior (pre-3.9.4):** The handler created an `ap_timeline` entry immediately and used `processStatusContent()` to linkify URLs with hardcoded `/@username` patterns. This caused: (1) posts appearing in timeline before syndication, (2) broken mention URLs for non-Mastodon servers, (3) links lost in the Micropub content file.
 
 ## Date Handling Convention
 
@@ -542,6 +548,22 @@ On restart, `refollow:pending` entries are reset to `import` to prevent stale cl
 | `unfurl.js` | Open Graph metadata extraction for link previews |
 | `express` | Route handling (peer: Indiekit provides it) |
 
+## Standards Compliance
+
+| FEP | Name | Status | Implementation |
+|-----|------|--------|----------------|
+| FEP-8b32 | Object Integrity Proofs | Full | Fedify signs all outbound activities with Ed25519 |
+| FEP-521a | Multiple key pairs (Multikey) | Full | RSA for HTTP Signatures + Ed25519 for OIP |
+| FEP-fe34 | Origin-based security | Full | `lookupWithSecurity()` in `lookup-helpers.js` |
+| FEP-8fcf | Collection Sync | Outbound | `syncCollection: true` on `sendActivity()` — receiving side NOT implemented |
+| FEP-5feb | Search indexing consent | Full | `indexable: true`, `discoverable: true` on actor in `federation-setup.js` |
+| FEP-f1d5 | Enhanced NodeInfo | Full | `setNodeInfoDispatcher()` in `federation-setup.js` |
+| FEP-4f05 | Soft delete / Tombstone | Full | `lib/storage/tombstones.js` + 410 in `contentNegotiationRoutes` |
+| FEP-3b86 | Activity Intents | Full | WebFinger links + `authorize-interaction.js` intent routing |
+| FEP-044f | Quote posts | Full | `quoteUrl` extraction + `ap-quote-embed.njk` rendering |
+| FEP-c0e0 | Emoji reactions | Vocab only | Fedify provides `EmojiReact` class, no UI in plugin |
+| FEP-5711 | Conversation threads | Vocab only | Fedify provides threading vocab |
+
 ## Configuration Options
 
 ```javascript
@@ -618,6 +640,45 @@ curl -s "https://rmendes.net/nodeinfo/2.1" | jq .
 - tags.pub does not send `Accept(Follow)` activities back to our inbox
 - `@_followback@tags.pub` does not send Follow activities back despite accepting ours
 - Both suggest tags.pub's outbound delivery is broken — zero inbound requests from `activitypub-bot` user-agent have been observed
+
+### 37. Unverified Delete Activities (Fedify 2.1.0+)
+
+`onUnverifiedActivity()` in `federation-setup.js` handles Delete activities from actors whose signing keys return 404/410. When an account is permanently deleted, the remote server sends a Delete activity but the actor's key endpoint is gone, so HTTP Signature verification fails. The handler checks `reason.type === "keyFetchError"` with status 404/410, cleans up the actor's data (followers, timeline items, notifications), and returns 202 Accepted.
+
+### 38. FEP-8fcf Collection Synchronization — Outbound Only
+
+We pass `syncCollection: true` to Fedify's `sendActivity()` for outbound activities, which attaches `Collection-Synchronization` headers with partial follower digests (XOR'd SHA-256 hashes). However, the **receiving side** (parsing inbound headers, digest comparison, reconciliation) is NOT implemented by Fedify or by us. Remote servers that send Collection-Synchronization headers to us will have them ignored. Full FEP-8fcf compliance would require a `/followers-sync` endpoint and a reconciliation scheduler.
+
+## Form Handling Convention
+
+Two form patterns are used in this plugin. New forms should follow the appropriate pattern.
+
+### Pattern 1: Traditional POST (data mutation forms)
+
+Used for: compose, profile editor, migration alias, notification mark-read/clear.
+
+- Standard `<form method="POST" action="...">`
+- CSRF via `<input type="hidden" name="_csrf" value="...">`
+- Server processes, then redirects (PRG pattern)
+- Success/error feedback via Indiekit's notification banner system
+- Uses Indiekit form macros (`input`, `textarea`, `button`) where available
+
+### Pattern 2: Alpine.js Fetch (in-page CRUD operations)
+
+Used for: moderation add/remove keyword/server, tab management, federation actions.
+
+- Alpine.js `@submit.prevent` or `@click` handlers
+- CSRF via `X-CSRF-Token` header in `fetch()` call
+- Inline error display with `x-show="error"` and `role="alert"`
+- Optimistic UI with rollback on failure
+- No page reload — DOM updates in place
+
+### Rules
+
+- Do NOT mix patterns on the same page (one pattern per form)
+- All forms MUST include CSRF protection (hidden field OR header)
+- Error feedback: Pattern 1 uses redirect + banner, Pattern 2 uses inline `x-show="error"`
+- Success feedback: Pattern 1 uses redirect + banner, Pattern 2 uses inline DOM update or element removal
 
 ## CSS Conventions
 

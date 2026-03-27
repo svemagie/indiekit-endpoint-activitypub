@@ -1,0 +1,308 @@
+/* ==========================================================================
+   Remote Profile
+   ========================================================================== */
+
+.ap-profile__header {
+  border-radius: var(--border-radius-small);
+  height: 200px;
+  margin-bottom: var(--space-m);
+  overflow: hidden;
+}
+
+.ap-profile__header-img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.ap-profile__info {
+  margin-bottom: var(--space-l);
+}
+
+.ap-profile__avatar-wrap {
+  height: 80px;
+  margin-bottom: var(--space-s);
+  position: relative;
+  width: 80px;
+}
+
+.ap-profile__avatar-wrap > img {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.ap-profile__avatar {
+  border: var(--border-width-thickest) solid var(--color-background);
+  border-radius: 50%;
+  height: 80px;
+  object-fit: cover;
+  width: 80px;
+}
+
+.ap-profile__avatar--placeholder {
+  align-items: center;
+  background: var(--color-offset-variant);
+  color: var(--color-on-offset);
+  display: flex;
+  font-size: 2em;
+  font-weight: 600;
+  justify-content: center;
+}
+
+.ap-profile__name {
+  font-size: var(--font-size-xl);
+  margin-bottom: var(--space-xs);
+}
+
+.ap-profile__handle {
+  color: var(--color-on-offset);
+  margin-bottom: var(--space-s);
+}
+
+.ap-profile__bio {
+  line-height: var(--line-height-prose);
+  margin-bottom: var(--space-s);
+}
+
+.ap-profile__bio a {
+  color: var(--color-primary-on-background);
+}
+
+/* Override upstream .mention { display: grid } for bio content */
+.ap-profile__bio .h-card {
+  display: inline;
+}
+
+.ap-profile__bio .h-card a,
+.ap-profile__bio a.u-url.mention {
+  display: inline;
+  white-space: nowrap;
+}
+
+.ap-profile__bio .h-card a span,
+.ap-profile__bio a.u-url.mention span {
+  display: inline;
+}
+
+.ap-profile__bio a.mention.hashtag {
+  display: inline;
+  white-space: nowrap;
+}
+
+.ap-profile__bio a.mention.hashtag span {
+  display: inline;
+}
+
+/* Mastodon invisible/ellipsis spans for long URLs in bios */
+.ap-profile__bio .invisible {
+  display: none;
+}
+
+.ap-profile__bio .ellipsis::after {
+  content: "…";
+}
+
+.ap-profile__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-s);
+  margin-top: var(--space-m);
+}
+
+.ap-profile__action {
+  background: transparent;
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  color: var(--color-on-background);
+  cursor: pointer;
+  font-size: var(--font-size-s);
+  padding: var(--space-xs) var(--space-m);
+  text-decoration: none;
+}
+
+.ap-profile__action:hover {
+  background: var(--color-offset);
+}
+
+.ap-profile__action--follow.ap-profile__action--active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary, var(--color-neutral99));
+}
+
+.ap-profile__action--danger:hover {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.ap-profile__posts {
+  margin-top: var(--space-l);
+}
+
+.ap-profile__posts h3 {
+  border-bottom: var(--border-width-thin) solid var(--color-outline);
+  font-size: var(--font-size-l);
+  margin-bottom: var(--space-m);
+  padding-bottom: var(--space-s);
+}
+
+/* ==========================================================================
+   My Profile — Admin Profile Header
+   ========================================================================== */
+
+.ap-my-profile {
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  margin-bottom: var(--space-m);
+  overflow: hidden;
+}
+
+.ap-my-profile__header {
+  height: 160px;
+  overflow: hidden;
+}
+
+.ap-my-profile__header-img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.ap-my-profile__info {
+  padding: var(--space-m);
+}
+
+.ap-my-profile__avatar-wrap {
+  margin-bottom: var(--space-s);
+  margin-top: -40px;
+}
+
+.ap-my-profile__avatar {
+  border: 3px solid var(--color-background);
+  border-radius: 50%;
+  height: 72px;
+  object-fit: cover;
+  width: 72px;
+}
+
+.ap-my-profile__avatar--placeholder {
+  align-items: center;
+  background: var(--color-offset-variant);
+  color: var(--color-on-offset);
+  display: flex;
+  font-size: 1.8em;
+  font-weight: 600;
+  justify-content: center;
+}
+
+.ap-my-profile__name {
+  font-size: var(--font-size-xl);
+  margin-bottom: 0;
+}
+
+.ap-my-profile__handle {
+  color: var(--color-on-offset);
+  font-size: var(--font-size-s);
+  margin-bottom: var(--space-s);
+}
+
+.ap-my-profile__bio {
+  line-height: var(--line-height-prose);
+  margin-bottom: var(--space-s);
+}
+
+.ap-my-profile__bio a {
+  color: var(--color-primary-on-background);
+}
+
+/* Override upstream .mention { display: grid } for bio content */
+.ap-my-profile__bio .h-card { display: inline; }
+.ap-my-profile__bio .h-card a,
+.ap-my-profile__bio a.u-url.mention { display: inline; white-space: nowrap; }
+.ap-my-profile__bio .h-card a span,
+.ap-my-profile__bio a.u-url.mention span { display: inline; }
+.ap-my-profile__bio a.mention.hashtag { display: inline; white-space: nowrap; }
+.ap-my-profile__bio a.mention.hashtag span { display: inline; }
+.ap-my-profile__bio .invisible { display: none; }
+.ap-my-profile__bio .ellipsis::after { content: "…"; }
+
+.ap-my-profile__fields {
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  margin: var(--space-s) 0;
+  overflow: hidden;
+}
+
+.ap-my-profile__field {
+  border-bottom: var(--border-width-thin) solid var(--color-outline);
+  display: grid;
+  grid-template-columns: 120px 1fr;
+}
+
+.ap-my-profile__field:last-child {
+  border-bottom: 0;
+}
+
+.ap-my-profile__field-name {
+  background: var(--color-offset);
+  color: var(--color-on-offset);
+  font-size: var(--font-size-s);
+  font-weight: 600;
+  padding: var(--space-xs) var(--space-s);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.ap-my-profile__field-value {
+  font-size: var(--font-size-s);
+  overflow: hidden;
+  padding: var(--space-xs) var(--space-s);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-my-profile__field-value a {
+  color: var(--color-primary-on-background);
+}
+
+.ap-my-profile__stats {
+  display: flex;
+  gap: var(--space-m);
+  margin-bottom: var(--space-s);
+}
+
+.ap-my-profile__stat {
+  color: var(--color-on-offset);
+  font-size: var(--font-size-s);
+  text-decoration: none;
+}
+
+.ap-my-profile__stat:hover {
+  color: var(--color-on-background);
+}
+
+.ap-my-profile__stat strong {
+  color: var(--color-on-background);
+  font-weight: 600;
+}
+
+.ap-my-profile__edit {
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  color: var(--color-on-background);
+  display: inline-block;
+  font-size: var(--font-size-s);
+  padding: var(--space-xs) var(--space-m);
+  text-decoration: none;
+}
+
+.ap-my-profile__edit:hover {
+  background: var(--color-offset);
+  border-color: var(--color-outline-variant);
+}
+
+/* When no header image, don't offset avatar */
+.ap-my-profile__info:first-child .ap-my-profile__avatar-wrap {
+  margin-top: 0;
+}

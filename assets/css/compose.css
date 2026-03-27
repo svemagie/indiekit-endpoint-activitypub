@@ -1,0 +1,169 @@
+/* ==========================================================================
+   Compose Form
+   ========================================================================== */
+
+.ap-compose__context {
+  background: var(--color-offset);
+  border-left: var(--border-width-thickest) solid var(--color-primary);
+  border-radius: var(--border-radius-small);
+  margin-bottom: var(--space-m);
+  padding: var(--space-m);
+}
+
+.ap-compose__context-label {
+  color: var(--color-on-offset);
+  font-size: var(--font-size-s);
+  margin-bottom: var(--space-xs);
+}
+
+.ap-compose__context-author a {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.ap-compose__context-text {
+  border: 0;
+  font-size: var(--font-size-s);
+  line-height: var(--line-height-loose);
+  margin: var(--space-xs) 0;
+  padding: 0;
+}
+
+.ap-compose__context-link {
+  color: var(--color-on-offset);
+  font-size: var(--font-size-s);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-compose__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-m);
+}
+
+.ap-compose__editor {
+  position: relative;
+}
+
+.ap-compose__textarea {
+  background: var(--color-background);
+  border: var(--border-width-thick) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  color: var(--color-on-background);
+  font-family: inherit;
+  font-size: var(--font-size-m);
+  line-height: var(--line-height-prose);
+  padding: var(--space-s);
+  resize: vertical;
+  width: 100%;
+}
+
+.ap-compose__textarea:focus {
+  border-color: var(--color-primary);
+  outline: var(--border-width-thick) solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+.ap-compose__cw {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.ap-compose__cw-toggle {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-s);
+  color: var(--color-on-offset);
+}
+
+.ap-compose__cw-input {
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  background: var(--color-offset);
+  color: var(--color-on-background);
+  font: inherit;
+  font-size: var(--font-size-s);
+  padding: var(--space-s);
+  width: 100%;
+}
+
+.ap-compose__cw-input:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.ap-compose__visibility {
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-s) var(--space-m);
+  padding: var(--space-m);
+}
+
+.ap-compose__visibility legend {
+  font-weight: 600;
+}
+
+.ap-compose__visibility-option {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-s);
+}
+
+.ap-compose__syndication {
+  border: var(--border-width-thin) solid var(--color-outline);
+  border-radius: var(--border-radius-small);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-m);
+}
+
+.ap-compose__syndication legend {
+  font-weight: 600;
+}
+
+.ap-compose__syndication-target {
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.ap-compose__actions {
+  align-items: center;
+  display: flex;
+  gap: var(--space-m);
+}
+
+.ap-compose__submit {
+  background: var(--color-primary);
+  border: 0;
+  border-radius: var(--border-radius-small);
+  color: var(--color-on-primary, var(--color-neutral99));
+  cursor: pointer;
+  font-size: var(--font-size-m);
+  font-weight: 600;
+  padding: var(--space-s) var(--space-l);
+}
+
+.ap-compose__submit:hover {
+  opacity: 0.9;
+}
+
+.ap-compose__cancel {
+  color: var(--color-on-offset);
+  text-decoration: none;
+}
+
+.ap-compose__cancel:hover {
+  color: var(--color-on-background);
+  text-decoration: underline;
+}

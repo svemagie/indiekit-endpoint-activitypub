@@ -1,6 +1,6 @@
 # @svemagie/indiekit-endpoint-activitypub
 
-ActivityPub federation endpoint for [Indiekit](https://getindiekit.com), built on [Fedify](https://fedify.dev) 2.0. Makes your IndieWeb site a full fediverse actor — discoverable, followable, and interactive from Mastodon, Misskey, Pixelfed, and any ActivityPub-compatible platform. Includes a Mastodon-compatible Client API so you can use Phanpy, Elk, Moshidon, Fedilab, and other Mastodon clients with your own AP instance.
+ActivityPub federation endpoint for [Indiekit](https://getindiekit.com), built on [Fedify](https://fedify.dev) 2.1. Makes your IndieWeb site a full fediverse actor — discoverable, followable, and interactive from Mastodon, Misskey, Pixelfed, and any ActivityPub-compatible platform. Includes a Mastodon-compatible Client API so you can use Phanpy, Elk, Moshidon, Fedilab, and other Mastodon clients with your own AP instance.
 
 This is a fork of [@rmdes/indiekit-endpoint-activitypub](https://github.com/rmdes/indiekit-endpoint-activitypub) by [Ricardo Mendes](https://rmendes.net) ([@rick@rmendes.net](https://rmendes.net)), adding direct message (DM) support.
 
@@ -119,13 +119,17 @@ Private ActivityPub messages (messages addressed only to your actor, with no `as
 - URL auto-linkification and @mention extraction in posted content
 - Thread context (ancestors + descendants)
 - Remote profile resolution via Fedify WebFinger with follower/following/post counts from AP collections
-- Account stats enrichment — embedded account data in timeline responses includes real counts
+- Account stats enrichment — cached account data applied immediately; uncached accounts resolved in background
 - Favourite, boost, bookmark interactions federated via Fedify AP activities
 - Notifications with type filtering
 - Search across accounts, statuses, and hashtags with remote resolution
 - Domain blocks API
 - Timeline backfill from posts collection on startup (bookmarks, likes, reposts get synthesized content)
 - In-memory account stats cache (500 entries, 1h TTL) for performance
+- OAuth2 scope enforcement — read/write scope validation on all API routes
+- Rate limiting — configurable limits on API, auth, and app registration endpoints
+- Access token expiry (1 hour) with refresh token rotation (90 days)
+- PKCE (S256) and CSRF protection on authorization flow
 
 **Admin UI**
 - Dashboard with follower/following counts and recent activity
@@ -136,10 +140,39 @@ Private ActivityPub messages (messages addressed only to your actor, with no `as
 - Follower and following lists with source tracking
 - Federation management page with moderation overview (blocked servers, blocked accounts, muted)
 
+**Standards Compliance**
+
+Core protocols and Fediverse Enhancement Proposals (FEPs) supported:
+
+| Standard | Name | Status | Provider |
+|----------|------|--------|----------|
+| [ActivityPub](https://www.w3.org/TR/activitypub/) | W3C ActivityPub | Full (server-to-server) | Fedify 2.1 |
+| [ActivityStreams 2.0](https://www.w3.org/TR/activitystreams-core/) | W3C Activity Streams | Full | Fedify 2.1 |
+| [HTTP Signatures](https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures) | draft-cavage HTTP Signatures | Full | Fedify 2.1 |
+| [RFC 9421](https://www.rfc-editor.org/rfc/rfc9421) | HTTP Message Signatures | Full (with Accept-Signature negotiation) | Fedify 2.1 |
+| [WebFinger](https://www.rfc-editor.org/rfc/rfc7033) | RFC 7033 WebFinger | Full | Fedify 2.1 |
+| [NodeInfo 2.1](https://nodeinfo.diaspora.software/) | Server metadata discovery | Full (enriched) | Plugin |
+| [FEP-8b32](https://w3id.org/fep/8b32) | Object Integrity Proofs (Ed25519) | Full | Fedify 2.1 |
+| [FEP-521a](https://w3id.org/fep/521a) | Multiple key pairs (Multikey) | Full | Fedify 2.1 |
+| [FEP-fe34](https://w3id.org/fep/fe34) | Origin-based security model | Full | Fedify 2.1 + Plugin |
+| [FEP-8fcf](https://w3id.org/fep/8fcf) | Followers collection synchronization | Outbound only | Fedify 2.1 |
+| [FEP-5feb](https://w3id.org/fep/5feb) | Search indexing consent | Full (`indexable`, `discoverable`) | Plugin |
+| [FEP-f1d5](https://w3id.org/fep/f1d5) | Enhanced NodeInfo 2.1 | Full (metadata, staff accounts) | Plugin |
+| [FEP-4f05](https://w3id.org/fep/4f05) | Soft delete with Tombstone | Full (410 + Tombstone JSON-LD) | Plugin |
+| [FEP-3b86](https://w3id.org/fep/3b86) | Activity Intents | Full (Follow, Create, Like, Announce) | Plugin |
+| [FEP-044f](https://w3id.org/fep/044f) | Quote posts | Full (Mastodon, Misskey, Fedibird formats) | Fedify 2.1 + Plugin |
+| [FEP-c0e0](https://w3id.org/fep/c0e0) | Emoji reactions (EmojiReact) | Vocab support (no UI) | Fedify 2.1 |
+| [FEP-5711](https://w3id.org/fep/5711) | Conversation threads | Vocab support | Fedify 2.1 |
+| [Linked Data Signatures](https://w3c-dvcg.github.io/ld-signatures/) | RsaSignature2017 (legacy) | Full (outbound signing) | Fedify 2.1 |
+
+**Status key:** *Full* = complete implementation, *Outbound only* = sending side only, *Vocab support* = types available but no dedicated UI/logic.
+
+**Provider key:** *Fedify 2.1* = handled by the Fedify framework, *Plugin* = implemented in this plugin, *Fedify 2.1 + Plugin* = framework provides primitives, plugin wires them together.
+
 ## Requirements
 
 - [Indiekit](https://getindiekit.com) v1.0.0-beta.25+
-- [Fedify](https://fedify.dev) 2.0+ (bundled as dependency)
+- [Fedify](https://fedify.dev) 2.1+ (bundled as dependency)
 - Node.js >= 22
 - MongoDB (used by Indiekit)
 - Redis (recommended for production delivery queue; in-process queue available for development)
@@ -371,6 +404,10 @@ The plugin creates these collections automatically:
 | `ap_blocked_servers` | Blocked server domains (instance-level blocks) |
 | `ap_key_freshness` | Tracks when remote actor keys were last verified |
 | `ap_inbox_queue` | Persistent async inbox processing queue |
+| `ap_tombstones` | Tombstone records for soft-deleted posts (FEP-4f05) |
+| `ap_oauth_apps` | Mastodon API client app registrations |
+| `ap_oauth_tokens` | OAuth2 authorization codes and access tokens |
+| `ap_markers` | Read position markers for Mastodon API clients |
 
 ## Supported Post Types
 
@@ -390,7 +427,7 @@ Categories are converted to `Hashtag` tags (nested paths like `on/art/music` are
 
 ## Fedify Workarounds and Implementation Notes
 
-This plugin uses [Fedify](https://fedify.dev) 2.0 but carries several workarounds for issues in Fedify or its Express integration. These are documented here so they can be revisited when Fedify upgrades.
+This plugin uses [Fedify](https://fedify.dev) 2.1 but carries several workarounds for issues in Fedify or its Express integration. These are documented here so they can be revisited when Fedify upgrades.
 
 ### Custom Express Bridge (instead of `@fedify/express`)
 
@@ -412,14 +449,11 @@ Mastodon's `update_account_fields` checks `attachment.is_a?(Array)` and silently
 
 **Revisit when:** Fedify adds an option to preserve arrays during JSON-LD serialization, or Mastodon fixes their array check.
 
-### Endpoints `as:Endpoints` Type Stripping
+### Endpoints `as:Endpoints` Type Stripping — REMOVED
 
-**File:** `lib/federation-bridge.js` (in `sendFedifyResponse()`)
 **Upstream issue:** [fedify#576](https://github.com/fedify-dev/fedify/issues/576) — FIXED in Fedify 2.1.0
 
-Fedify serializes the `endpoints` object with `"type": "as:Endpoints"`, which is not a valid ActivityStreams type. browser.pub rejects this. The bridge strips the `type` field from the `endpoints` object before sending.
-
-**Remove when:** Upgrading to Fedify ≥ 2.1.0.
+This workaround has been removed. Fedify 2.1.0 now omits the invalid `"type": "as:Endpoints"` from serialized actor JSON.
 
 ### PropertyValue Attachment Type (Known Issue)
 
@@ -466,7 +500,6 @@ This is not a bug — Fedify requires explicit opt-in for signed fetches. But it
 - **Single actor** — One fediverse identity per Indiekit instance
 - **No Authorized Fetch enforcement** — `.authorize()` disabled on actor dispatcher (see workarounds above)
 - **No image upload in reader** — Compose form is text-only
-- **No custom emoji rendering** — Custom emoji shortcodes display as text
 - **In-process queue without Redis** — Activities may be lost on restart
 - **Existing DMs before this fork** — Notifications received before upgrading to this fork lack `isDirect`/`senderActorUrl` and won't appear in the Direct tab (resend or patch manually in MongoDB)
 - **No read receipts** — Outbound DMs are stored locally but the recipient receives no read-receipt activity

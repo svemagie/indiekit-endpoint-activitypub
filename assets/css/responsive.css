@@ -1,0 +1,33 @@
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .ap-tabs {
+    gap: 0;
+  }
+
+  .ap-tab {
+    padding: var(--space-xs) var(--space-s);
+  }
+
+  .ap-card__gallery--3 {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .ap-card__gallery--3 img:first-child {
+    grid-column: 1 / 3;
+    grid-row: 1;
+    height: 200px;
+  }
+
+  .ap-card__actions {
+    gap: var(--space-xs);
+  }
+
+  .ap-card__action {
+    font-size: 0.75rem;
+    padding: var(--space-xs);
+  }
+}

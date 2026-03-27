@@ -4,6 +4,7 @@ import { setupFederation, buildPersonActor } from "./lib/federation-setup.js";
 import { createMastodonRouter } from "./lib/mastodon/router.js";
 import { setLocalIdentity } from "./lib/mastodon/entities/status.js";
 import { initRedisCache } from "./lib/redis-cache.js";
+import { createIndexes } from "./lib/init-indexes.js";
 import { lookupWithSecurity } from "./lib/lookup-helpers.js";
 import {
   needsDirectFollow,
@@ -16,8 +17,8 @@ import {
 import {
   jf2ToActivityStreams,
   jf2ToAS2Activity,
-  parseMentions,
 } from "./lib/jf2-to-as2.js";
+import { createSyndicator } from "./lib/syndicator.js";
 import { dashboardController } from "./lib/controllers/dashboard.js";
 import {
   readerController,
@@ -115,8 +116,7 @@ import {
 } from "./lib/controllers/refollow.js";
 import { startBatchRefollow } from "./lib/batch-refollow.js";
 import { logActivity } from "./lib/activity-log.js";
-import { resolveAuthor } from "./lib/resolve-author.js";
-import { addTimelineItem } from "./lib/storage/timeline.js";
+import { batchBroadcast } from "./lib/batch-broadcast.js";
 import { scheduleCleanup } from "./lib/timeline-cleanup.js";
 import { runSeparateMentionsMigration } from "./lib/migrations/separate-mentions.js";
 import { loadBlockedServersToRedis } from "./lib/storage/server-blocks.js";
@@ -484,38 +484,6 @@ export default class ActivityPubEndpoint {
     const router = express.Router(); // eslint-disable-line new-cap
     const self = this;
 
-    // Intercept Micropub delete actions to broadcast Delete to fediverse.
-    // Wraps res.json to detect successful delete responses, then fires
-    // broadcastDelete asynchronously so remote servers remove the post.
-    router.use((req, res, next) => {
-      if (req.method !== "POST") return next();
-      if (!req.path.endsWith("/micropub")) return next();
-
-      const action = req.query?.action || req.body?.action;
-      if (action !== "delete") return next();
-
-      const postUrl = req.query?.url || req.body?.url;
-      if (!postUrl) return next();
-
-      const originalJson = res.json.bind(res);
-      res.json = function (body) {
-        // Fire broadcastDelete after successful delete (status 200)
-        if (res.statusCode === 200 && body?.success === "delete") {
-          console.info(
-            `[ActivityPub] Micropub delete detected for ${postUrl}, broadcasting Delete to followers`,
-          );
-          self.broadcastDelete(postUrl).catch((error) => {
-            console.warn(
-              `[ActivityPub] broadcastDelete after Micropub delete failed: ${error.message}`,
-            );
-          });
-        }
-        return originalJson(body);
-      };
-
-      return next();
-    });
-
     // Let Fedify handle NodeInfo data (/nodeinfo/2.1)
     // Only pass GET/HEAD requests — POST/PUT/DELETE must not go through
     // Fedify here, because fromExpressRequest() consumes the body stream,
@@ -562,6 +530,20 @@ export default class ActivityPubEndpoint {
         });
 
         if (!post || post.properties?.deleted) {
+          // FEP-4f05: Serve Tombstone for deleted posts
+          const { getTombstone } = await import("./lib/storage/tombstones.js");
+          const tombstone = await getTombstone(self._collections, requestUrl);
+          if (tombstone) {
+            res.status(410).set("Content-Type", "application/activity+json").json({
+              "@context": "https://www.w3.org/ns/activitystreams",
+              type: "Tombstone",
+              id: requestUrl,
+              formerType: tombstone.formerType,
+              published: tombstone.published || undefined,
+              deleted: tombstone.deleted,
+            });
+            return;
+          }
           return next();
         }
 
@@ -594,284 +576,7 @@ export default class ActivityPubEndpoint {
    * Syndicator — delivers posts to ActivityPub followers via Fedify.
    */
   get syndicator() {
-    const self = this;
-    return {
-      name: "ActivityPub syndicator",
-      options: { checked: self.options.checked },
-
-      get info() {
-        const hostname = self._publicationUrl
-          ? new URL(self._publicationUrl).hostname
-          : "example.com";
-        return {
-          checked: self.options.checked,
-          name: `@${self.options.actor.handle}@${hostname}`,
-          uid: self._publicationUrl || "https://example.com/",
-          service: {
-            name: "ActivityPub (Fediverse)",
-            photo: "/assets/@rmdes-indiekit-endpoint-activitypub/icon.svg",
-            url: self._publicationUrl || "https://example.com/",
-          },
-        };
-      },
-
-      async syndicate(properties) {
-        if (!self._federation) {
-          return undefined;
-        }
-
-        const visibility = String(properties?.visibility || "").toLowerCase();
-        if (visibility === "unlisted") {
-          console.info(
-            "[ActivityPub] Skipping federation for unlisted post: " +
-              (properties?.url || "unknown"),
-          );
-          await logActivity(self._collections.ap_activities, {
-            direction: "outbound",
-            type: "Syndicate",
-            actorUrl: self._publicationUrl,
-            objectUrl: properties?.url,
-            summary: "Syndication skipped: post visibility is unlisted",
-          }).catch(() => {});
-          return undefined;
-        }
-
-        try {
-          const actorUrl = self._getActorUrl();
-          const handle = self.options.actor.handle;
-
-          const ctx = self._federation.createContext(
-            new URL(self._publicationUrl),
-            { handle, publicationUrl: self._publicationUrl },
-          );
-
-          // For replies, resolve the original post author for proper
-          // addressing (CC) and direct inbox delivery
-          let replyToActor = null;
-          if (properties["in-reply-to"]) {
-            try {
-              const remoteObject = await lookupWithSecurity(ctx,
-                new URL(properties["in-reply-to"]),
-              );
-              if (remoteObject && typeof remoteObject.getAttributedTo === "function") {
-                const author = await remoteObject.getAttributedTo();
-                const authorActor = Array.isArray(author) ? author[0] : author;
-                if (authorActor?.id) {
-                  replyToActor = {
-                    url: authorActor.id.href,
-                    handle: authorActor.preferredUsername || null,
-                    recipient: authorActor,
-                  };
-                  console.info(
-                    `[ActivityPub] Reply to ${properties["in-reply-to"]} — resolved author: ${replyToActor.url}`,
-                  );
-                }
-              }
-            } catch (error) {
-              console.warn(
-                `[ActivityPub] Could not resolve reply-to author for ${properties["in-reply-to"]}: ${error.message}`,
-              );
-            }
-          }
-
-          // Resolve @user@domain mentions in content via WebFinger
-          const contentText = properties.content?.html || properties.content || "";
-          const mentionHandles = parseMentions(contentText);
-          const resolvedMentions = [];
-          const mentionRecipients = [];
-
-          for (const { handle } of mentionHandles) {
-            try {
-              const mentionedActor = await lookupWithSecurity(ctx,
-                new URL(`acct:${handle}`),
-              );
-              if (mentionedActor?.id) {
-                resolvedMentions.push({
-                  handle,
-                  actorUrl: mentionedActor.id.href,
-                  profileUrl: mentionedActor.url?.href || null,
-                });
-                mentionRecipients.push({
-                  handle,
-                  actorUrl: mentionedActor.id.href,
-                  actor: mentionedActor,
-                });
-                console.info(
-                  `[ActivityPub] Resolved mention @${handle} → ${mentionedActor.id.href}`,
-                );
-              }
-            } catch (error) {
-              console.warn(
-                `[ActivityPub] Could not resolve mention @${handle}: ${error.message}`,
-              );
-              // Still add with no actorUrl so it gets a fallback link
-              resolvedMentions.push({ handle, actorUrl: null });
-            }
-          }
-
-          const activity = await jf2ToAS2Activity(
-            properties,
-            actorUrl,
-            self._publicationUrl,
-            {
-              replyToActorUrl: replyToActor?.url,
-              replyToActorHandle: replyToActor?.handle,
-              visibility: self.options.defaultVisibility,
-              mentions: resolvedMentions,
-            },
-          );
-
-          if (!activity) {
-            await logActivity(self._collections.ap_activities, {
-              direction: "outbound",
-              type: "Syndicate",
-              actorUrl: self._publicationUrl,
-              objectUrl: properties.url,
-              summary: `Syndication skipped: could not convert post to AS2`,
-            });
-            return undefined;
-          }
-
-          // Count followers for logging
-          const followerCount =
-            await self._collections.ap_followers.countDocuments();
-
-          console.info(
-            `[ActivityPub] Sending ${activity.constructor?.name || "activity"} for ${properties.url} to ${followerCount} followers`,
-          );
-
-          // Send to followers via shared inboxes with collection sync (FEP-8fcf)
-          await ctx.sendActivity(
-            { identifier: handle },
-            "followers",
-            activity,
-            {
-              preferSharedInbox: true,
-              syncCollection: true,
-              orderingKey: properties.url,
-            },
-          );
-
-          // For replies, also deliver to the original post author's inbox
-          // so their server can thread the reply under the original post
-          if (replyToActor?.recipient) {
-            try {
-              await ctx.sendActivity(
-                { identifier: handle },
-                replyToActor.recipient,
-                activity,
-                { orderingKey: properties.url },
-              );
-              console.info(
-                `[ActivityPub] Reply delivered to author: ${replyToActor.url}`,
-              );
-            } catch (error) {
-              console.warn(
-                `[ActivityPub] Failed to deliver reply to ${replyToActor.url}: ${error.message}`,
-              );
-            }
-          }
-
-          // Deliver to mentioned actors' inboxes (skip reply-to author, already delivered above)
-          for (const { handle: mHandle, actorUrl: mUrl, actor: mActor } of mentionRecipients) {
-            if (replyToActor?.url === mUrl) continue;
-            try {
-              await ctx.sendActivity(
-                { identifier: handle },
-                mActor,
-                activity,
-                { orderingKey: properties.url },
-              );
-              console.info(
-                `[ActivityPub] Mention delivered to @${mHandle}: ${mUrl}`,
-              );
-            } catch (error) {
-              console.warn(
-                `[ActivityPub] Failed to deliver mention to @${mHandle}: ${error.message}`,
-              );
-            }
-          }
-
-          // Determine activity type name
-          const typeName =
-            activity.constructor?.name || "Create";
-          const replyNote = replyToActor
-            ? ` (reply to ${replyToActor.url})`
-            : "";
-          const mentionNote = mentionRecipients.length > 0
-            ? ` (mentions: ${mentionRecipients.map(m => `@${m.handle}`).join(", ")})`
-            : "";
-
-          await logActivity(self._collections.ap_activities, {
-            direction: "outbound",
-            type: typeName,
-            actorUrl: self._publicationUrl,
-            objectUrl: properties.url,
-            targetUrl: properties["in-reply-to"] || undefined,
-            summary: `Sent ${typeName} for ${properties.url} to ${followerCount} followers${replyNote}${mentionNote}`,
-          });
-
-          console.info(
-            `[ActivityPub] Syndication queued: ${typeName} for ${properties.url}${replyNote}`,
-          );
-
-          // Mirror own Micropub-created posts into ap_timeline so the Mastodon
-          // Client API (context, statuses, etc.) can find them by ID.
-          if (typeName === "Create" && properties.url) {
-            try {
-              const postUrl = properties.url;
-              const rawHtml = properties.content?.html || (typeof properties.content === "string" ? properties.content : "") || "";
-              const now = new Date().toISOString();
-              const postType = properties["post-type"] || "note";
-              const asArray = (v) => Array.isArray(v) ? v : v ? [v] : [];
-              await addTimelineItem(self._collections, {
-                uid: postUrl,
-                url: postUrl,
-                type: postType,
-                content: { html: rawHtml, text: rawHtml.replace(/<[^>]*>/g, "") },
-                summary: properties["content-warning"] || properties.summary || "",
-                sensitive: !!(properties.sensitive || properties["post-status"] === "sensitive" || properties["content-warning"]),
-                visibility: properties.visibility || self.options.defaultVisibility || "public",
-                language: properties.lang || properties.language || null,
-                inReplyTo: properties["in-reply-to"] || null,
-                published: properties.published || now,
-                createdAt: now,
-                author: {
-                  name: self.options.actor.name || handle,
-                  url: actorUrl,
-                  photo: self.options.actor.icon || "",
-                  handle: `@${handle}`,
-                  emojis: [],
-                  bot: false,
-                },
-                photo: asArray(properties.photo),
-                video: asArray(properties.video),
-                audio: asArray(properties.audio),
-                category: asArray(properties.category),
-                counts: { replies: 0, boosts: 0, likes: 0 },
-                linkPreviews: [],
-                mentions: [],
-                emojis: [],
-              });
-            } catch (timelineError) {
-              console.warn("[ActivityPub] Failed to mirror syndicated post to ap_timeline:", timelineError.message);
-            }
-          }
-
-          return properties.url || undefined;
-        } catch (error) {
-          console.error("[ActivityPub] Syndication failed:", error.message);
-          await logActivity(self._collections.ap_activities, {
-            direction: "outbound",
-            type: "Syndicate",
-            actorUrl: self._publicationUrl,
-            objectUrl: properties.url,
-            summary: `Syndication failed: ${error.message}`,
-          }).catch(() => {});
-          return undefined;
-        }
-      },
-    };
+    return createSyndicator(this);
   }
 
   /**
@@ -1270,9 +975,6 @@ export default class ActivityPubEndpoint {
         { handle, publicationUrl: this._publicationUrl },
       );
 
-      // Build the full actor object (same as what the dispatcher serves).
-      // Note: ctx.getActor() only exists on RequestContext, not the base
-      // Context returned by createContext(), so we use the shared helper.
       const actor = await buildPersonActor(
         ctx,
         handle,
@@ -1289,86 +991,17 @@ export default class ActivityPubEndpoint {
         object: actor,
       });
 
-      // Fetch followers and deduplicate by shared inbox so each remote
-      // server only gets one delivery (same as preferSharedInbox but
-      // gives us control over batching).
-      const followers = await this._collections.ap_followers
-        .find({})
-        .project({ actorUrl: 1, inbox: 1, sharedInbox: 1 })
-        .toArray();
-
-      // Group by shared inbox (or direct inbox if none)
-      const inboxMap = new Map();
-      for (const f of followers) {
-        const key = f.sharedInbox || f.inbox;
-        if (key && !inboxMap.has(key)) {
-          inboxMap.set(key, f);
-        }
-      }
-
-      const uniqueRecipients = [...inboxMap.values()];
-      const BATCH_SIZE = 25;
-      const BATCH_DELAY_MS = 5000;
-      let delivered = 0;
-      let failed = 0;
-
-      console.info(
-        `[ActivityPub] Broadcasting Update(Person) to ${uniqueRecipients.length} ` +
-          `unique inboxes (${followers.length} followers) in batches of ${BATCH_SIZE}`,
-      );
-
-      for (let i = 0; i < uniqueRecipients.length; i += BATCH_SIZE) {
-        const batch = uniqueRecipients.slice(i, i + BATCH_SIZE);
-
-        // Build Fedify-compatible Recipient objects:
-        // extractInboxes() reads: recipient.id, recipient.inboxId,
-        // recipient.endpoints?.sharedInbox
-        const recipients = batch.map((f) => ({
-          id: new URL(f.actorUrl),
-          inboxId: new URL(f.inbox || f.sharedInbox),
-          endpoints: f.sharedInbox
-            ? { sharedInbox: new URL(f.sharedInbox) }
-            : undefined,
-        }));
-
-        try {
-          await ctx.sendActivity(
-            { identifier: handle },
-            recipients,
-            update,
-            { preferSharedInbox: true },
-          );
-          delivered += batch.length;
-        } catch (error) {
-          failed += batch.length;
-          console.warn(
-            `[ActivityPub] Batch ${Math.floor(i / BATCH_SIZE) + 1} failed: ${error.message}`,
-          );
-        }
-
-        // Stagger batches so remote servers don't all re-fetch at once
-        if (i + BATCH_SIZE < uniqueRecipients.length) {
-          await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
-        }
-      }
-
-      console.info(
-        `[ActivityPub] Update(Person) broadcast complete: ` +
-          `${delivered} delivered, ${failed} failed`,
-      );
-
-      await logActivity(this._collections.ap_activities, {
-        direction: "outbound",
-        type: "Update",
-        actorUrl: this._publicationUrl,
+      await batchBroadcast({
+        federation: this._federation,
+        collections: this._collections,
+        publicationUrl: this._publicationUrl,
+        handle,
+        activity: update,
+        label: "Update(Person)",
         objectUrl: this._getActorUrl(),
-        summary: `Sent Update(Person) to ${delivered}/${uniqueRecipients.length} inboxes`,
-      }).catch(() => {});
+      });
     } catch (error) {
-      console.error(
-        "[ActivityPub] broadcastActorUpdate failed:",
-        error.message,
-      );
+      console.error("[ActivityPub] broadcastActorUpdate failed:", error.message);
     }
   }
 
@@ -1393,73 +1026,103 @@ export default class ActivityPubEndpoint {
         object: new URL(postUrl),
       });
 
-      const followers = await this._collections.ap_followers
-        .find({})
-        .project({ actorUrl: 1, inbox: 1, sharedInbox: 1 })
-        .toArray();
-
-      const inboxMap = new Map();
-      for (const f of followers) {
-        const key = f.sharedInbox || f.inbox;
-        if (key && !inboxMap.has(key)) {
-          inboxMap.set(key, f);
-        }
-      }
-
-      const uniqueRecipients = [...inboxMap.values()];
-      const BATCH_SIZE = 25;
-      const BATCH_DELAY_MS = 5000;
-      let delivered = 0;
-      let failed = 0;
-
-      console.info(
-        `[ActivityPub] Broadcasting Delete for ${postUrl} to ${uniqueRecipients.length} ` +
-          `unique inboxes (${followers.length} followers)`,
-      );
-
-      for (let i = 0; i < uniqueRecipients.length; i += BATCH_SIZE) {
-        const batch = uniqueRecipients.slice(i, i + BATCH_SIZE);
-        const recipients = batch.map((f) => ({
-          id: new URL(f.actorUrl),
-          inboxId: new URL(f.inbox || f.sharedInbox),
-          endpoints: f.sharedInbox
-            ? { sharedInbox: new URL(f.sharedInbox) }
-            : undefined,
-        }));
-
-        try {
-          await ctx.sendActivity(
-            { identifier: handle },
-            recipients,
-            del,
-            { preferSharedInbox: true },
-          );
-          delivered += batch.length;
-        } catch (error) {
-          failed += batch.length;
-          console.warn(
-            `[ActivityPub] Delete batch ${Math.floor(i / BATCH_SIZE) + 1} failed: ${error.message}`,
-          );
-        }
-
-        if (i + BATCH_SIZE < uniqueRecipients.length) {
-          await new Promise((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
-        }
-      }
-
-      console.info(
-        `[ActivityPub] Delete broadcast complete for ${postUrl}: ${delivered} delivered, ${failed} failed`,
-      );
-
-      await logActivity(this._collections.ap_activities, {
-        direction: "outbound",
-        type: "Delete",
-        actorUrl: this._publicationUrl,
+      await batchBroadcast({
+        federation: this._federation,
+        collections: this._collections,
+        publicationUrl: this._publicationUrl,
+        handle,
+        activity: del,
+        label: "Delete",
         objectUrl: postUrl,
-        summary: `Sent Delete for ${postUrl} to ${delivered} inboxes`,
-      }).catch(() => {});
+      });
     } catch (error) {
       console.warn("[ActivityPub] broadcastDelete failed:", error.message);
+    }
+  }
+
+  /**
+   * Called by post-content.js when a Micropub delete succeeds.
+   * Broadcasts an ActivityPub Delete activity to all followers.
+   * @param {string} url - Full URL of the deleted post
+   */
+  async delete(url) {
+    // Record tombstone for FEP-4f05
+    try {
+      const { addTombstone } = await import("./lib/storage/tombstones.js");
+      const postsCol = this._collections.posts;
+      const post = postsCol ? await postsCol.findOne({ "properties.url": url }) : null;
+      await addTombstone(this._collections, {
+        url,
+        formerType: post?.properties?.["post-type"] === "article" ? "Article" : "Note",
+        published: post?.properties?.published || null,
+        deleted: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.warn(`[ActivityPub] Tombstone creation failed for ${url}: ${error.message}`);
+    }
+
+    await this.broadcastDelete(url).catch((err) =>
+      console.warn(`[ActivityPub] broadcastDelete failed for ${url}: ${err.message}`)
+    );
+  }
+
+  /**
+   * Called by post-content.js when a Micropub update succeeds.
+   * Broadcasts an ActivityPub Update activity for the post to all followers.
+   * @param {object} properties - JF2 post properties (must include url)
+   */
+  async update(properties) {
+    await this.broadcastPostUpdate(properties).catch((err) =>
+      console.warn(`[ActivityPub] broadcastPostUpdate failed for ${properties?.url}: ${err.message}`)
+    );
+  }
+
+  /**
+   * Send an Update activity to all followers for a modified post.
+   * Mirrors broadcastDelete() pattern: batch delivery with shared inbox dedup.
+   * @param {object} properties - JF2 post properties
+   */
+  async broadcastPostUpdate(properties) {
+    if (!this._federation) return;
+
+    try {
+      const { Update } = await import("@fedify/fedify/vocab");
+      const actorUrl = this._getActorUrl();
+      const handle = this.options.actor.handle;
+      const ctx = this._federation.createContext(
+        new URL(this._publicationUrl),
+        { handle, publicationUrl: this._publicationUrl },
+      );
+
+      const createActivity = jf2ToAS2Activity(
+        properties,
+        actorUrl,
+        this._publicationUrl,
+        { visibility: this.options.defaultVisibility },
+      );
+
+      if (!createActivity) {
+        console.warn(`[ActivityPub] broadcastPostUpdate: could not convert post to AS2 for ${properties?.url}`);
+        return;
+      }
+
+      const noteObject = await createActivity.getObject();
+      const activity = new Update({
+        actor: ctx.getActorUri(handle),
+        object: noteObject,
+      });
+
+      await batchBroadcast({
+        federation: this._federation,
+        collections: this._collections,
+        publicationUrl: this._publicationUrl,
+        handle,
+        activity,
+        label: "Update(Note)",
+        objectUrl: properties.url,
+      });
+    } catch (error) {
+      console.warn("[ActivityPub] broadcastPostUpdate failed:", error.message);
     }
   }
 
@@ -1514,6 +1177,8 @@ export default class ActivityPubEndpoint {
     Indiekit.addCollection("ap_oauth_apps");
     Indiekit.addCollection("ap_oauth_tokens");
     Indiekit.addCollection("ap_markers");
+    // Tombstones for soft-deleted posts (FEP-4f05)
+    Indiekit.addCollection("ap_tombstones");
 
     // Store collection references (posts resolved lazily)
     const indiekitCollections = Indiekit.collections;
@@ -1551,249 +1216,18 @@ export default class ActivityPubEndpoint {
       ap_oauth_apps: indiekitCollections.get("ap_oauth_apps"),
       ap_oauth_tokens: indiekitCollections.get("ap_oauth_tokens"),
       ap_markers: indiekitCollections.get("ap_markers"),
+      ap_tombstones: indiekitCollections.get("ap_tombstones"),
       get posts() {
         return indiekitCollections.get("posts");
       },
       _publicationUrl: this._publicationUrl,
     };
 
-    // Create indexes — wrapped in try-catch because collection references
-    // may be undefined if MongoDB hasn't finished connecting yet.
-    // Indexes are idempotent; they'll be created on next successful startup.
-    try {
-      // TTL index for activity cleanup (MongoDB handles expiry automatically)
-      const retentionDays = this.options.activityRetentionDays;
-      if (retentionDays > 0) {
-        this._collections.ap_activities.createIndex(
-          { receivedAt: 1 },
-          { expireAfterSeconds: retentionDays * 86_400 },
-        );
-      }
-
-      // Performance indexes for inbox handlers and batch refollow
-      this._collections.ap_followers.createIndex(
-        { actorUrl: 1 },
-        { unique: true, background: true },
-      );
-      this._collections.ap_following.createIndex(
-        { actorUrl: 1 },
-        { unique: true, background: true },
-      );
-      this._collections.ap_following.createIndex(
-        { source: 1 },
-        { background: true },
-      );
-      this._collections.ap_activities.createIndex(
-        { objectUrl: 1 },
-        { background: true },
-      );
-      this._collections.ap_activities.createIndex(
-        { type: 1, actorUrl: 1, objectUrl: 1 },
-        { background: true },
-      );
-
-      // Reader indexes (timeline, notifications, moderation, interactions)
-      this._collections.ap_timeline.createIndex(
-        { uid: 1 },
-        { unique: true, background: true },
-      );
-      this._collections.ap_timeline.createIndex(
-        { published: -1 },
-        { background: true },
-      );
-      this._collections.ap_timeline.createIndex(
-        { "author.url": 1 },
-        { background: true },
-      );
-      this._collections.ap_timeline.createIndex(
-        { type: 1, published: -1 },
-        { background: true },
-      );
-
-      this._collections.ap_notifications.createIndex(
-        { uid: 1 },
-        { unique: true, background: true },
-      );
-      this._collections.ap_notifications.createIndex(
-        { published: -1 },
-        { background: true },
-      );
-      this._collections.ap_notifications.createIndex(
-        { read: 1 },
-        { background: true },
-      );
-      this._collections.ap_notifications.createIndex(
-        { type: 1, published: -1 },
-        { background: true },
-      );
-
-      // TTL index for notification cleanup
-      const notifRetention = this.options.notificationRetentionDays;
-      if (notifRetention > 0) {
-        this._collections.ap_notifications.createIndex(
-          { createdAt: 1 },
-          { expireAfterSeconds: notifRetention * 86_400 },
-        );
-      }
-
-      // Message indexes
-      this._collections.ap_messages.createIndex(
-        { uid: 1 },
-        { unique: true, background: true },
-      );
-      this._collections.ap_messages.createIndex(
-        { published: -1 },
-        { background: true },
-      );
-      this._collections.ap_messages.createIndex(
-        { read: 1 },
-        { background: true },
-      );
-      this._collections.ap_messages.createIndex(
-        { conversationId: 1, published: -1 },
-        { background: true },
-      );
-      this._collections.ap_messages.createIndex(
-        { direction: 1 },
-        { background: true },
-      );
-      // TTL index for message cleanup (reuse notification retention)
-      if (notifRetention > 0) {
-        this._collections.ap_messages.createIndex(
-          { createdAt: 1 },
-          { expireAfterSeconds: notifRetention * 86_400 },
-        );
-      }
-
-      // Muted collection — sparse unique indexes (allow multiple null values)
-      this._collections.ap_muted
-        .dropIndex("url_1")
-        .catch(() => {})
-        .then(() =>
-          this._collections.ap_muted.createIndex(
-            { url: 1 },
-            { unique: true, sparse: true, background: true },
-          ),
-        )
-        .catch(() => {});
-      this._collections.ap_muted
-        .dropIndex("keyword_1")
-        .catch(() => {})
-        .then(() =>
-          this._collections.ap_muted.createIndex(
-            { keyword: 1 },
-            { unique: true, sparse: true, background: true },
-          ),
-        )
-        .catch(() => {});
-
-      this._collections.ap_blocked.createIndex(
-        { url: 1 },
-        { unique: true, background: true },
-      );
-
-      this._collections.ap_interactions.createIndex(
-        { objectUrl: 1, type: 1 },
-        { unique: true, background: true },
-      );
-      this._collections.ap_interactions.createIndex(
-        { type: 1 },
-        { background: true },
-      );
-
-      // Followed hashtags — unique on tag (case-insensitive via normalization at write time)
-      this._collections.ap_followed_tags.createIndex(
-        { tag: 1 },
-        { unique: true, background: true },
-      );
-
-      // Tag filtering index on timeline
-      this._collections.ap_timeline.createIndex(
-        { category: 1, published: -1 },
-        { background: true },
-      );
-
-      // Explore tab indexes
-      // Compound unique on (type, domain, scope, hashtag) prevents duplicate tabs.
-      // ALL insertions must explicitly set all four fields (unused fields = null)
-      // because MongoDB treats missing fields differently from null in unique indexes.
-      this._collections.ap_explore_tabs.createIndex(
-        { type: 1, domain: 1, scope: 1, hashtag: 1 },
-        { unique: true, background: true },
-      );
-      // Order index for efficient sorting of tab bar
-      this._collections.ap_explore_tabs.createIndex(
-        { order: 1 },
-        { background: true },
-      );
-
-      // ap_reports indexes
-      if (notifRetention > 0) {
-        this._collections.ap_reports.createIndex(
-          { createdAt: 1 },
-          { expireAfterSeconds: notifRetention * 86_400 },
-        );
-      }
-      this._collections.ap_reports.createIndex(
-        { reporterUrl: 1 },
-        { background: true },
-      );
-      this._collections.ap_reports.createIndex(
-        { reportedUrls: 1 },
-        { background: true },
-      );
-      // Pending follow requests — unique on actorUrl
-      this._collections.ap_pending_follows.createIndex(
-        { actorUrl: 1 },
-        { unique: true, background: true },
-      );
-      this._collections.ap_pending_follows.createIndex(
-        { requestedAt: -1 },
-        { background: true },
-      );
-      // Server-level blocks
-      this._collections.ap_blocked_servers.createIndex(
-        { hostname: 1 },
-        { unique: true, background: true },
-      );
-      // Key freshness tracking
-      this._collections.ap_key_freshness.createIndex(
-        { actorUrl: 1 },
-        { unique: true, background: true },
-      );
-
-      // Inbox queue indexes
-      this._collections.ap_inbox_queue.createIndex(
-        { status: 1, receivedAt: 1 },
-        { background: true },
-      );
-      // TTL: auto-prune completed items after 24h
-      this._collections.ap_inbox_queue.createIndex(
-        { processedAt: 1 },
-        { expireAfterSeconds: 86_400, background: true },
-      );
-
-      // Mastodon Client API indexes
-      this._collections.ap_oauth_apps.createIndex(
-        { clientId: 1 },
-        { unique: true, background: true },
-      );
-      this._collections.ap_oauth_tokens.createIndex(
-        { accessToken: 1 },
-        { unique: true, sparse: true, background: true },
-      );
-      this._collections.ap_oauth_tokens.createIndex(
-        { code: 1 },
-        { unique: true, sparse: true, background: true },
-      );
-      this._collections.ap_markers.createIndex(
-        { userId: 1, timeline: 1 },
-        { unique: true, background: true },
-      );
-    } catch {
-      // Index creation failed — collections not yet available.
-      // Indexes already exist from previous startups; non-fatal.
-    }
+    // Create indexes (idempotent — safe on every startup)
+    createIndexes(this._collections, {
+      activityRetentionDays: this.options.activityRetentionDays,
+      notificationRetentionDays: this.options.notificationRetentionDays,
+    });
 
     // Seed actor profile from config on first run
     this._seedProfile().catch((error) => {
@@ -1898,6 +1332,7 @@ export default class ActivityPubEndpoint {
     }, 10_000);
 
     // Run one-time migrations (idempotent — safe to run on every startup)
+    console.info("[ActivityPub] Init: starting post-refollow setup");
     runSeparateMentionsMigration(this._collections).then(({ skipped, updated }) => {
       if (!skipped) {
         console.log(`[ActivityPub] Migration separate-mentions: updated ${updated} timeline items`);
@@ -1944,6 +1379,7 @@ export default class ActivityPubEndpoint {
     });
 
     // Start async inbox queue processor (processes one item every 3s)
+    console.info("[ActivityPub] Init: starting inbox queue processor");
     this._inboxProcessorInterval = startInboxProcessor(
       this._collections,
       () => this._federation?.createContext(new URL(this._publicationUrl), {

@@ -1,0 +1,94 @@
+/* ==========================================================================
+   Dark Mode Overrides
+   Softens saturated colors that are uncomfortable on dark backgrounds.
+   Uses Indiekit's existing light-variant tokens (red80, green90, yellow90)
+   which are designed for dark surfaces.
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+
+  /* --- Action button hover states: softer colors, more visible tinted backgrounds --- */
+  .ap-card__action--reply:hover {
+    background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+    color: var(--color-primary-on-background);
+  }
+
+  .ap-card__action--boost:hover {
+    background: color-mix(in srgb, var(--color-green50) 18%, transparent);
+    color: var(--color-green90);
+  }
+
+  .ap-card__action--like:hover {
+    background: color-mix(in srgb, var(--color-red45) 18%, transparent);
+    color: var(--color-red80);
+  }
+
+  .ap-card__action--save:hover {
+    background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+    color: var(--color-primary-on-background);
+  }
+
+  /* --- Active interaction states --- */
+  .ap-card__action--like.ap-card__action--active {
+    background: color-mix(in srgb, var(--color-red45) 18%, transparent);
+    color: var(--color-red80);
+  }
+
+  .ap-card__action--boost.ap-card__action--active {
+    background: color-mix(in srgb, var(--color-green50) 18%, transparent);
+    color: var(--color-green90);
+  }
+
+  .ap-card__action--save.ap-card__action--active {
+    background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+    color: var(--color-primary-on-background);
+  }
+
+  /* --- Post-type left border accents: desaturated for dark surfaces --- */
+  .ap-card--note,
+  .ap-card--note:hover {
+    border-left-color: var(--color-purple90);
+  }
+
+  .ap-card--article,
+  .ap-card--article:hover {
+    border-left-color: var(--color-green90);
+  }
+
+  .ap-card--boost,
+  .ap-card--boost:hover {
+    border-left-color: var(--color-yellow90);
+  }
+
+  .ap-card--reply,
+  .ap-card--reply:hover {
+    border-left-color: var(--color-primary-on-background);
+  }
+
+  /* --- Notification unread glow: toned down --- */
+  .ap-notification--unread {
+    border-color: var(--color-yellow90);
+    box-shadow: 0 0 6px 0 color-mix(in srgb, var(--color-yellow50) 15%, transparent);
+  }
+
+  /* --- Post detail highlight ring: softened --- */
+  .ap-post-detail__main .ap-card {
+    border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 50%, transparent);
+  }
+
+  /* --- Card shadows: use light tint instead of black --- */
+  .ap-card {
+    box-shadow: 0 1px 2px hsl(var(--tint-neutral) 90% / 0.04);
+  }
+
+  .ap-card:hover {
+    box-shadow: 0 2px 8px hsl(var(--tint-neutral) 90% / 0.06);
+  }
+
+  /* --- Tab badge federated: soften purple --- */
+  .ap-tab__badge--federated {
+    color: var(--color-purple90);
+    background: color-mix(in srgb, var(--color-purple45) 18%, transparent);
+  }
+}
