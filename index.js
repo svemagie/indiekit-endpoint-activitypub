@@ -117,6 +117,7 @@ import {
 import { startBatchRefollow } from "./lib/batch-refollow.js";
 import { logActivity } from "./lib/activity-log.js";
 import { batchBroadcast } from "./lib/batch-broadcast.js";
+import { resolveAuthor } from "./lib/resolve-author.js";
 import { scheduleCleanup } from "./lib/timeline-cleanup.js";
 import { runSeparateMentionsMigration } from "./lib/migrations/separate-mentions.js";
 import { loadBlockedServersToRedis } from "./lib/storage/server-blocks.js";
