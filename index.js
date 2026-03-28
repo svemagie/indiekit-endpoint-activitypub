@@ -1,4 +1,5 @@
 import express from "express";
+import { waitForReady } from "@rmdes/indiekit-startup-gate";
 
 import { setupFederation, buildPersonActor } from "./lib/federation-setup.js";
 import { createMastodonRouter } from "./lib/mastodon/router.js";
@@ -1096,19 +1097,6 @@ export default class ActivityPubEndpoint {
     // Register syndicator (appears in post editing UI)
     Indiekit.addSyndicator(this.syndicator);
 
-    // Start batch re-follow processor after federation settles
-    const refollowOptions = {
-      federation: this._federation,
-      collections: this._collections,
-      handle: this.options.actor.handle,
-      publicationUrl: this._publicationUrl,
-    };
-    setTimeout(() => {
-      startBatchRefollow(refollowOptions).catch((error) => {
-        console.error("[ActivityPub] Batch refollow start failed:", error.message);
-      });
-    }, 10_000);
-
     // Run one-time migrations (idempotent — safe to run on every startup)
     console.info("[ActivityPub] Init: starting post-refollow setup");
     runSeparateMentionsMigration(this._collections).then(({ skipped, updated }) => {
@@ -1119,52 +1107,66 @@ export default class ActivityPubEndpoint {
       console.error("[ActivityPub] Migration separate-mentions failed:", error.message);
     });
 
-    // Schedule timeline retention cleanup (runs on startup + every 24h)
-    if (this.options.timelineRetention > 0) {
-      scheduleCleanup(this._collections, this.options.timelineRetention);
-    }
-
-    // Load server blocks into Redis for fast inbox checks
-    loadBlockedServersToRedis(this._collections).catch((error) => {
-      console.warn("[ActivityPub] Failed to load blocked servers to Redis:", error.message);
-    });
-
-    // Schedule proactive key refresh for stale follower keys (runs on startup + every 24h)
+    // Defer background workers until host is ready
+    const refollowOptions = {
+      federation: this._federation,
+      collections: this._collections,
+      handle: this.options.actor.handle,
+      publicationUrl: this._publicationUrl,
+    };
     const keyRefreshHandle = this.options.actor.handle;
     const keyRefreshFederation = this._federation;
     const keyRefreshPubUrl = this._publicationUrl;
-    scheduleKeyRefresh(
-      this._collections,
-      () => keyRefreshFederation?.createContext(new URL(keyRefreshPubUrl), {
-        handle: keyRefreshHandle,
-        publicationUrl: keyRefreshPubUrl,
-      }),
-      keyRefreshHandle,
-    );
-
-    // Backfill ap_timeline from posts collection (idempotent, runs on every startup)
-    import("./lib/mastodon/backfill-timeline.js").then(({ backfillTimeline }) => {
-      // Delay to let MongoDB connections settle
-      setTimeout(() => {
-        backfillTimeline(this._collections).then(({ total, inserted, skipped }) => {
-          if (inserted > 0) {
-            console.log(`[Mastodon API] Timeline backfill: ${inserted} posts added (${skipped} already existed, ${total} total)`);
-          }
-        }).catch((error) => {
-          console.warn("[Mastodon API] Timeline backfill failed:", error.message);
+    this._stopGate = waitForReady(
+      () => {
+        // Start batch re-follow processor
+        startBatchRefollow(refollowOptions).catch((error) => {
+          console.error("[ActivityPub] Batch refollow start failed:", error.message);
         });
-      }, 5000);
-    });
 
-    // Start async inbox queue processor (processes one item every 3s)
-    console.info("[ActivityPub] Init: starting inbox queue processor");
-    this._inboxProcessorInterval = startInboxProcessor(
-      this._collections,
-      () => this._federation?.createContext(new URL(this._publicationUrl), {
-        handle: this.options.actor.handle,
-        publicationUrl: this._publicationUrl,
-      }),
-      this.options.actor.handle,
+        // Schedule timeline retention cleanup (runs on startup + every 24h)
+        if (this.options.timelineRetention > 0) {
+          scheduleCleanup(this._collections, this.options.timelineRetention);
+        }
+
+        // Load server blocks into Redis for fast inbox checks
+        loadBlockedServersToRedis(this._collections).catch((error) => {
+          console.warn("[ActivityPub] Failed to load blocked servers to Redis:", error.message);
+        });
+
+        // Schedule proactive key refresh for stale follower keys (runs on startup + every 24h)
+        scheduleKeyRefresh(
+          this._collections,
+          () => keyRefreshFederation?.createContext(new URL(keyRefreshPubUrl), {
+            handle: keyRefreshHandle,
+            publicationUrl: keyRefreshPubUrl,
+          }),
+          keyRefreshHandle,
+        );
+
+        // Backfill ap_timeline from posts collection (idempotent, runs on every startup)
+        import("./lib/mastodon/backfill-timeline.js").then(({ backfillTimeline }) => {
+          backfillTimeline(this._collections).then(({ total, inserted, skipped }) => {
+            if (inserted > 0) {
+              console.log(`[Mastodon API] Timeline backfill: ${inserted} posts added (${skipped} already existed, ${total} total)`);
+            }
+          }).catch((error) => {
+            console.warn("[Mastodon API] Timeline backfill failed:", error.message);
+          });
+        });
+
+        // Start async inbox queue processor (processes one item every 3s)
+        console.info("[ActivityPub] Init: starting inbox queue processor");
+        this._inboxProcessorInterval = startInboxProcessor(
+          this._collections,
+          () => this._federation?.createContext(new URL(this._publicationUrl), {
+            handle: this.options.actor.handle,
+            publicationUrl: this._publicationUrl,
+          }),
+          this.options.actor.handle,
+        );
+      },
+      { label: "ActivityPub" },
     );
   }
 
@@ -1197,5 +1199,9 @@ export default class ActivityPubEndpoint {
     }
 
     await ap_profile.insertOne(profile);
+  }
+
+  destroy() {
+    this._stopGate?.();
   }
 }
