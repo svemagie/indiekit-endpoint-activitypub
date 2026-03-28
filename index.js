@@ -1203,5 +1203,8 @@ export default class ActivityPubEndpoint {
 
   destroy() {
     this._stopGate?.();
+    if (this._inboxProcessorInterval) {
+      clearInterval(this._inboxProcessorInterval);
+    }
   }
 }
