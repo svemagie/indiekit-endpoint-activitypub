@@ -1,6 +1,9 @@
 {% extends "layouts/ap-reader.njk" %}
 
 {% from "heading/macro.njk" import heading with context %}
+{% from "textarea/macro.njk" import textarea with context %}
+{% from "file-input/macro.njk" import fileInput with context %}
+{% from "tag-input/macro.njk" import tagInput with context %}
 
 {% block readercontent %}
   {# Reply context — show the post being replied to #}
@@ -21,7 +24,7 @@
     </div>
   {% endif %}
 
-  <form method="post" action="{{ mountPath }}/admin/reader/compose" class="ap-compose__form">
+  <form method="post" action="{{ mountPath }}/admin/reader/compose" class="ap-compose__form" enctype="multipart/form-data">
     <input type="hidden" name="_csrf" value="{{ csrfToken }}">
     {% if replyTo %}
       <input type="hidden" name="in-reply-to" value="{{ replyTo }}">
@@ -39,12 +42,37 @@
         style="display: none">
     </div>
 
-    {# Content textarea #}
+    {# Rich content editor (EasyMDE with media browser) #}
     <div class="ap-compose__editor">
-      <textarea name="content" class="ap-compose__textarea"
-        rows="6"
-        placeholder="{{ __('activitypub.compose.placeholder') }}"
-        required></textarea>
+      {{ textarea({
+        id: "content",
+        name: "content",
+        label: { text: __("activitypub.compose.contentLabel") if __("activitypub.compose.contentLabel") else "Content" },
+        attributes: {
+          rows: "8",
+          required: "true"
+        },
+        endpoint: mediaEndpoint
+      }) }}
+    </div>
+
+    {# Featured image #}
+    <div class="ap-compose__media">
+      {{ fileInput({
+        id: "photo",
+        name: "photo",
+        label: { text: __("activitypub.compose.photoLabel") if __("activitypub.compose.photoLabel") else "Photo" },
+        endpoint: mediaEndpoint
+      }) }}
+    </div>
+
+    {# Tags / categories #}
+    <div class="ap-compose__tags">
+      {{ tagInput({
+        id: "category",
+        name: "category",
+        label: { text: __("activitypub.compose.tagsLabel") if __("activitypub.compose.tagsLabel") else "Tags" }
+      }) }}
     </div>
 
     {# Visibility #}

@@ -959,6 +959,15 @@ export default class ActivityPubEndpoint {
     Indiekit.addCollection("ap_markers");
     // Tombstones for soft-deleted posts (FEP-4f05)
     Indiekit.addCollection("ap_tombstones");
+    // Media attachments (Mastodon API upload)
+    Indiekit.addCollection("ap_media");
+    // Status edit history
+    Indiekit.addCollection("ap_status_edits");
+    // Idempotency keys for Mastodon API
+    Indiekit.addCollection("ap_idempotency");
+    // Filters and filter keywords
+    Indiekit.addCollection("ap_filters");
+    Indiekit.addCollection("ap_filter_keywords");
 
     // Store collection references (posts resolved lazily)
     const indiekitCollections = Indiekit.collections;
@@ -997,6 +1006,15 @@ export default class ActivityPubEndpoint {
       ap_oauth_tokens: indiekitCollections.get("ap_oauth_tokens"),
       ap_markers: indiekitCollections.get("ap_markers"),
       ap_tombstones: indiekitCollections.get("ap_tombstones"),
+      // Media attachments (Mastodon API upload)
+      ap_media: indiekitCollections.get("ap_media"),
+      // Status edit history
+      ap_status_edits: indiekitCollections.get("ap_status_edits"),
+      // Idempotency keys for Mastodon API
+      ap_idempotency: indiekitCollections.get("ap_idempotency"),
+      // Filters and filter keywords
+      ap_filters: indiekitCollections.get("ap_filters"),
+      ap_filter_keywords: indiekitCollections.get("ap_filter_keywords"),
       get posts() {
         return indiekitCollections.get("posts");
       },
