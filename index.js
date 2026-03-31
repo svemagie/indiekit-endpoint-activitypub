@@ -131,6 +131,10 @@ import {
   broadcastActorUpdateController,
   lookupObjectController,
 } from "./lib/controllers/federation-mgmt.js";
+import {
+  settingsGetController,
+  settingsPostController,
+} from "./lib/controllers/settings.js";
 
 const defaults = {
   mountPath: "/activitypub",
@@ -204,6 +208,11 @@ export default class ActivityPubEndpoint {
       {
         href: `${this.options.mountPath}/admin/federation`,
         text: "activitypub.federationMgmt.title",
+        requiresDatabase: true,
+      },
+      {
+        href: `${this.options.mountPath}/admin/settings`,
+        text: "activitypub.settings.title",
         requiresDatabase: true,
       },
     ];
@@ -377,6 +386,10 @@ export default class ActivityPubEndpoint {
     router.get("/admin/federation/ap-json", viewApJsonController(mp, this));
     router.post("/admin/federation/broadcast-actor", broadcastActorUpdateController(mp, this));
     router.get("/admin/federation/lookup", lookupObjectController(mp, this));
+
+    // Settings
+    router.get("/admin/settings", settingsGetController(mp));
+    router.post("/admin/settings", settingsPostController(mp));
 
     return router;
   }
