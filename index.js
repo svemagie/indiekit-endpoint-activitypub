@@ -969,6 +969,9 @@ export default class ActivityPubEndpoint {
     Indiekit.addCollection("ap_filters");
     Indiekit.addCollection("ap_filter_keywords");
 
+    // Plugin settings (single document, admin UI at /admin/settings)
+    Indiekit.addCollection("ap_settings");
+
     // Store collection references (posts resolved lazily)
     const indiekitCollections = Indiekit.collections;
     this._collections = {
