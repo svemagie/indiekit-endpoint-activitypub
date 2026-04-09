@@ -170,7 +170,7 @@ processing pipeline via item-processing.js:
 
 ### 1. Express ↔ Fedify Bridge (CUSTOM — NOT @fedify/express)
 
-We **cannot** use `@fedify/express`'s `integrateFederation()` because Indiekit mounts plugins at sub-paths. Express strips the mount prefix from `req.url`, breaking Fedify's URI template matching. **Verified in Fedify 2.0**: `@fedify/express` still uses `req.url` (not `req.originalUrl`), so the custom bridge remains necessary. Instead, `federation-bridge.js` uses `req.originalUrl` to build the full URL.
+We **cannot** use `@fedify/express`'s `integrateFederation()` because Indiekit mounts plugins at sub-paths. Express strips the mount prefix from `req.url`, breaking Fedify's URI template matching. **Verified in Fedify 2.0**: `@fedify/express` still uses `req.url` (not `req.originalUrl`), so the custom bridge remains necessary. `federation-bridge.js` uses `req.originalUrl` to build the full URL.
 
 The bridge also **reconstructs POST bodies** from `req.body` when Express body parser has already consumed the request stream (checked via `req.readable === false`). Without this, POST handlers in Fedify (e.g. the `@fedify/debugger` login form) receive empty bodies and fail with `"Response body object should not be disturbed or locked"`.
 
@@ -178,15 +178,15 @@ The bridge also **reconstructs POST bodies** from `req.body` when Express body p
 
 ### 2. Content Negotiation Route — GET Only
 
-The `contentNegotiationRoutes` router is mounted at `/` (root). It MUST only pass `GET`/`HEAD` requests to Fedify. Passing `POST`/`PUT`/`DELETE` would cause `fromExpressRequest()` to consume the body stream via `Readable.toWeb(req)`, breaking Express body-parsed routes downstream (admin forms, Micropub, etc.).
+The `contentNegotiationRoutes` router is mounted at `/` (root). It MUST only pass `GET`/`HEAD` requests to Fedify. Passing `POST`/`PUT`/`DELETE` would cause `fromExpressRequest()` to consume the body stream, breaking Express body-parsed routes downstream.
 
 ### 3. Skip Fedify for Admin Routes
 
-In `routesPublic`, the middleware skips paths starting with `/admin`. Without this, Fedify would intercept admin UI requests and return 404/406 responses instead of letting Express serve the authenticated pages.
+In `routesPublic`, the middleware skips paths starting with `/admin`. Without this, Fedify intercepts admin UI requests and returns 404/406 responses.
 
 ### 4. Authenticated Document Loader for Inbox Handlers
 
-All `.getObject()` / `.getActor()` / `.getTarget()` calls in inbox handlers **must** pass an authenticated `DocumentLoader` to sign outbound fetches. Without this, requests to Authorized Fetch (Secure Mode) servers like hachyderm.io fail with 401.
+All `.getObject()` / `.getActor()` / `.getTarget()` calls in inbox handlers **must** pass an authenticated `DocumentLoader` to sign outbound fetches. Without this, requests to Authorized Fetch servers like hachyderm.io fail with 401.
 
 ```javascript
 const authLoader = await ctx.getDocumentLoader({ identifier: handle });
@@ -194,49 +194,42 @@ const actor = await activity.getActor({ documentLoader: authLoader });
 const object = await activity.getObject({ documentLoader: authLoader });
 ```
 
-The `getAuthLoader` helper in `inbox-listeners.js` wraps this pattern. The authenticated loader is also passed through to `extractObjectData()` and `extractActorInfo()` in `timeline-store.js` so that `.getAttributedTo()`, `.getIcon()`, `.getTags()`, and `.getAttachments()` also sign their fetches.
+The `getAuthLoader` helper in `inbox-listeners.js` wraps this. It's also passed through to `extractObjectData()` and `extractActorInfo()` in `timeline-store.js`.
 
-**Still prefer** `.objectId?.href` and `.actorId?.href` (zero network requests) when you only need the URL — e.g. Like, Delete, and the filter check in Announce. Only use the fetching getters when you need the full object, and **always wrap in try-catch**.
+**Still prefer** `.objectId?.href` and `.actorId?.href` (zero network requests) when you only need the URL. Only use fetching getters when you need the full object, and **always wrap in try-catch**.
 
 ### 5. Accept(Follow) Matching — Don't Check Inner Object Type
 
-Fedify often resolves the inner object of `Accept` to a `Person` (the Follow's target) rather than the `Follow` itself. The Accept handler matches against `ap_following` by actor URL instead of inspecting `inner instanceof Follow`.
+Fedify often resolves the inner object of `Accept` to a `Person` rather than the `Follow` itself. The Accept handler matches against `ap_following` by actor URL instead of inspecting `inner instanceof Follow`.
 
 ### 6. Filter Inbound Likes/Announces to Our Content Only
 
-Without filtering, the inbox logs every Like/Announce from every federated server — including reactions to other people's content that happens to flow through shared inboxes. Check `objectId.startsWith(publicationUrl)` before logging.
+Check `objectId.startsWith(publicationUrl)` before logging — shared inboxes receive reactions to other people's content.
 
 ### 7. Nunjucks Template Name Collisions
 
-Template names resolve across ALL registered plugin view directories. If two plugins have `views/layouts/reader.njk`, Nunjucks loads whichever it finds first (often wrong). The reader layout is named `ap-reader.njk` to avoid collision with `@rmdes/indiekit-endpoint-microsub`'s `reader.njk`.
+Template names resolve across ALL registered plugin view directories. The reader layout is named `ap-reader.njk` to avoid collision with `@rmdes/indiekit-endpoint-microsub`'s `reader.njk`.
 
 **Never name a layout/template with a generic name that another plugin might use.**
 
 ### 8. Express 5 — No redirect("back")
 
-Express 5 removed the `"back"` magic keyword from `response.redirect()`. It's treated as a literal URL, causing 404s at paths like `/admin/featured/back`. Always use explicit redirect paths.
+Express 5 removed the `"back"` magic keyword from `response.redirect()`. Always use explicit redirect paths.
 
 ### 9. Attachment Array Workaround (Mastodon Compatibility)
 
 JSON-LD compaction collapses single-element arrays to plain objects. Mastodon's `update_account_fields` checks `attachment.is_a?(Array)` and silently skips if it's not an array. `sendFedifyResponse()` in `federation-bridge.js` forces `attachment` to always be an array.
 
-### 10. REMOVED: Endpoints `as:Endpoints` Type Stripping (Fixed in Fedify 2.1.0)
-
-**Upstream issue:** [fedify#576](https://github.com/fedify-dev/fedify/issues/576) — FIXED in Fedify 2.1.0
-**Previous workaround** in `federation-bridge.js` — **REMOVED**.
-Fedify 2.1.0 now omits the invalid `"type": "as:Endpoints"` from serialized actor JSON. No workaround needed.
-
-### 11. KNOWN ISSUE: PropertyValue Attachment Type Validation
+### 10. KNOWN ISSUE: PropertyValue Attachment Type Validation
 
 **Upstream issue:** [fedify#629](https://github.com/fedify-dev/fedify/issues/629) — OPEN
-**Problem:** `PropertyValue` (schema.org type) is not a valid AS2 Object/Link, so browser.pub rejects `/attachment`. Every Mastodon-compatible server emits this — cannot remove without breaking profile fields.
-**Workaround:** None applied (would break Mastodon compatibility). Documented as a known browser.pub strictness issue.
+`PropertyValue` (schema.org type) is not a valid AS2 Object/Link, so browser.pub rejects `/attachment`. Cannot remove without breaking Mastodon-compatible profile fields.
 
-### 12. Profile Links — Express qs Body Parser Key Mismatch
+### 11. Profile Links — Express qs Body Parser Key Mismatch
 
-`express.urlencoded({ extended: true })` uses `qs` which strips `[]` from array field names. HTML fields named `link_name[]` arrive as `request.body.link_name` (not `request.body["link_name[]"]`). The profile controller reads `link_name` and `link_value`, NOT `link_name[]`.
+`express.urlencoded({ extended: true })` strips `[]` from array field names. HTML fields named `link_name[]` arrive as `request.body.link_name`. The profile controller reads `link_name` and `link_value`, NOT `link_name[]`.
 
-### 13. Author Resolution Fallback Chain
+### 12. Author Resolution Fallback Chain
 
 `extractObjectData()` in `timeline-store.js` uses a multi-strategy fallback:
 1. `object.getAttributedTo()` — async, may fail with Authorized Fetch
@@ -244,224 +237,181 @@ Fedify 2.1.0 now omits the invalid `"type": "as:Endpoints"` from serialized acto
 3. `object.attribution` / `object.attributedTo` — plain object properties
 4. `object.attributionIds` — non-fetching URL array with username extraction from common patterns (`/@name`, `/users/name`)
 
-Without this chain, many timeline items show "Unknown" as the author.
+### 13. Username Extraction from Actor URLs
 
-### 14. Username Extraction from Actor URLs
+Handle multiple URL patterns: `/@username` (Mastodon), `/users/username` (Mastodon, Indiekit), `/ap/users/12345/` (numeric IDs). The regex was previously matching "users" instead of the actual username from `/users/NatalieDavis`.
 
-When extracting usernames from attribution IDs, handle multiple URL patterns:
-- `/@username` (Mastodon)
-- `/users/username` (Mastodon, Indiekit)
-- `/ap/users/12345/` (numeric IDs on some platforms)
+### 14. Empty Boost Filtering
 
-The regex was previously matching "users" instead of the actual username from `/users/NatalieDavis`.
+Lemmy/PieFed send Announce activities where the boosted object resolves to an activity ID instead of a Note/Article. Check `object.content || object.name` before storing.
 
-### 15. Empty Boost Filtering
+### 15. Temporal.Instant for Fedify Dates
 
-Lemmy/PieFed send Announce activities where the boosted object resolves to an activity ID instead of a Note/Article with actual content. Check `object.content || object.name` before storing to avoid empty cards in the timeline.
+Fedify uses `@js-temporal/polyfill`. When setting `published`, use `Temporal.Instant.from(isoString)`. When reading Fedify dates, use `String(object.published)` — NOT `new Date(object.published)` (causes `TypeError`).
 
-### 16. Temporal.Instant for Fedify Dates
+### 16. LogTape — Configure Once Only
 
-Fedify uses `@js-temporal/polyfill` for dates. When setting `published` on Fedify objects, use `Temporal.Instant.from(isoString)`. When reading Fedify dates in inbox handlers, use `String(object.published)` to get ISO strings — NOT `new Date(object.published)` which causes `TypeError`.
+`@logtape/logtape`'s `configure()` can only be called once per process. The `_logtapeConfigured` flag prevents duplicate configuration. When `debugDashboard: true`, LogTape configuration is skipped entirely because `@fedify/debugger` configures its own sink.
 
-### 17. LogTape — Configure Once Only
+### 17. .authorize() Intentionally NOT Chained on Actor Dispatcher
 
-`@logtape/logtape`'s `configure()` can only be called once per process. The module-level `_logtapeConfigured` flag prevents duplicate configuration. If configure fails (e.g., another plugin already configured it), catch the error silently.
+Fedify's `.authorize()` triggers HTTP Signature verification on every GET to the actor endpoint. Servers requiring Authorized Fetch cause infinite loops (401 → retry → 500). Re-enable when Fedify supports authenticated document loading for outgoing fetches.
 
-When the debug dashboard is enabled (`debugDashboard: true`), LogTape configuration is **skipped entirely** because `@fedify/debugger` configures its own LogTape sink for the dashboard UI.
+### 18. Delivery Queue Must Be Started
 
-### 18. .authorize() Intentionally NOT Chained on Actor Dispatcher
+`federation.startQueue()` MUST be called after setup. Without it, `ctx.sendActivity()` enqueues tasks but they are never processed.
 
-Fedify's `.authorize()` triggers HTTP Signature verification on every GET to the actor endpoint. Servers requiring Authorized Fetch cause infinite loops: Fedify tries to fetch their key → they return 401 → Fedify retries → 500 errors. Re-enable when Fedify supports authenticated document loading for outgoing fetches.
+### 19. Shared Key Dispatcher for Shared Inbox
 
-### 19. Delivery Queue Must Be Started
+`inboxChain.setSharedKeyDispatcher()` tells Fedify to use our actor's key pair when verifying HTTP Signatures on the shared inbox. Without this, servers like hachyderm.io reject signatures.
 
-`federation.startQueue()` MUST be called after setup. Without it, `ctx.sendActivity()` enqueues tasks but the message queue never processes them — activities are never delivered.
-
-### 20. Shared Key Dispatcher for Shared Inbox
-
-`inboxChain.setSharedKeyDispatcher()` tells Fedify to use our actor's key pair when verifying HTTP Signatures on the shared inbox. Without this, servers like hachyderm.io (which requires Authorized Fetch) have their signatures rejected.
-
-### 21. Fedify 2.0 Modular Imports
-
-Fedify 2.0 uses modular entry points instead of a single barrel export. Imports must use the correct subpath:
+### 20. Fedify 2.0 Modular Imports
 
 ```javascript
-// Core federation infra
 import { createFederation, InProcessMessageQueue } from "@fedify/fedify";
-
-// Crypto operations (key generation, import/export)
 import { exportJwk, generateCryptoKeyPair, importJwk } from "@fedify/fedify/sig";
-
-// ActivityStreams vocabulary types
 import { Person, Note, Article, Create, Follow, ... } from "@fedify/fedify/vocab";
 
-// WRONG (Fedify 1.x style) — these no longer work:
+// WRONG (Fedify 1.x style):
 // import { Person, createFederation, exportJwk } from "@fedify/fedify";
 ```
 
-### 22. importSpki Removed in Fedify 2.0
+### 21. importSpki Removed in Fedify 2.0
 
-Fedify 1.x exported `importSpki()` for loading PEM public keys. This was removed in 2.0. The local `importSpkiPem()` function in `federation-setup.js` replaces it using the Web Crypto API directly (`crypto.subtle.importKey("spki", ...)`). Similarly, `importPkcs8Pem()` handles private keys in PKCS#8 format.
+Replaced by local `importSpkiPem()` in `federation-setup.js` using `crypto.subtle.importKey("spki", ...)`. Similarly `importPkcs8Pem()` handles PKCS#8 private keys.
 
-### 23. KvStore Requires list() in Fedify 2.0
+### 22. KvStore Requires list() in Fedify 2.0
 
-Fedify 2.0 added a `list(prefix?)` method to the KvStore interface. It must return an `AsyncIterable<{ key: string[], value: unknown }>`. The `MongoKvStore` in `kv-store.js` implements this as an async generator that queries MongoDB with a regex prefix match on the `_id` field.
+`list(prefix?)` must return `AsyncIterable<{ key: string[], value: unknown }>`. `MongoKvStore` in `kv-store.js` implements this as an async generator with a regex prefix match on `_id`.
 
-### 24. Debug Dashboard Body Consumption
+### 23. Unified Item Processing Pipeline
 
-The `@fedify/debugger` login form POSTs `application/x-www-form-urlencoded` data. Because Express's body parser runs before the Fedify bridge, the POST body stream is already consumed (`req.readable === false`). The bridge in `federation-bridge.js` detects this and reconstructs the body from `req.body`. Without this, the debugger's login handler receives an empty body and throws `"Response body object should not be disturbed or locked"`. See also Gotcha #1.
-
-### 25. Unified Item Processing Pipeline
-
-All views that display timeline items — reader, explore, tag timeline, hashtag explore, and their AJAX API counterparts — **must** use the shared pipeline in `lib/item-processing.js`. Never duplicate moderation filtering, quote stripping, interaction map building, or card rendering in individual controllers.
-
-The pipeline flow is:
+All views displaying timeline items **must** use `lib/item-processing.js`. Never duplicate moderation filtering, quote stripping, interaction map building, or card rendering in individual controllers.
 
 ```javascript
-import { postProcessItems, applyTabFilter, loadModerationData, renderItemCards } from "../item-processing.js";
-
-// 1. Get raw items (from MongoDB or Mastodon API)
-// 2. Filter by tab/type (optional)
 const filtered = applyTabFilter(items, tab);
-// 3. Load moderation data once
 const moderation = await loadModerationData(modCollections);
-// 4. Run unified pipeline (filters muted/blocked, strips quote refs, builds interaction map)
 const { items: processed, interactionMap } = await postProcessItems(filtered, { moderation, interactionsCol });
-// 5. For AJAX endpoints, render HTML server-side
 const html = await renderItemCards(processed, request, { interactionMap, mountPath, csrfToken });
 ```
 
-**Key functions:**
-- `postProcessItems()` — orchestrates moderation → quote stripping → interaction map
-- `applyModerationFilters()` — filters items by muted URLs, keywords, blocked URLs
-- `stripQuoteReferences()` — removes inline `RE: <link>` paragraphs when quote embed exists
-- `buildInteractionMap()` — queries `ap_interactions` for like/boost state per item
-- `applyTabFilter()` — filters items by type tab (notes, articles, replies, boosts, media)
-- `renderItemCards()` — server-side Nunjucks rendering of `ap-item-card.njk` for AJAX responses
-- `loadModerationData()` — convenience wrapper to load muted/blocked data from MongoDB
+Key functions: `postProcessItems()`, `applyModerationFilters()`, `stripQuoteReferences()`, `buildInteractionMap()`, `applyTabFilter()`, `renderItemCards()`, `loadModerationData()`.
 
-**If you add a new view that shows timeline items, use this pipeline.** Do not inline the logic.
+### 24. Unified Infinite Scroll Alpine Component
 
-### 26. Unified Infinite Scroll Alpine Component
-
-All views with infinite scroll use a single `apInfiniteScroll` Alpine.js component (in `assets/reader-infinite-scroll.js`), parameterized via data attributes on the container element:
+All views with infinite scroll use `apInfiniteScroll` in `assets/reader-infinite-scroll.js`, configured via data attributes:
 
 ```html
 <div class="ap-load-more"
   data-cursor="{{ cursor }}"
   data-api-url="{{ mountPath }}/admin/reader/api/timeline"
-  data-cursor-param="before"        <!-- query param name sent to API -->
-  data-cursor-field="before"         <!-- response JSON field for next cursor -->
-  data-timeline-id="ap-timeline"     <!-- DOM ID to append HTML into -->
-  data-extra-params='{{ extraJson }}'  <!-- JSON object of additional query params -->
-  data-hide-pagination="pagination-id" <!-- optional: ID of no-JS pagination to hide -->
+  data-cursor-param="before"
+  data-cursor-field="before"
+  data-timeline-id="ap-timeline"
+  data-extra-params='{{ extraJson }}'
+  data-hide-pagination="pagination-id"
   x-data="apInfiniteScroll()"
   x-init="init()">
 ```
 
-**Do not create separate scroll components for new views.** Configure the existing one with appropriate data attributes. The explore view uses `data-cursor-param="max_id"` and `data-cursor-field="maxId"` (Mastodon API conventions), while the reader uses `data-cursor-param="before"` and `data-cursor-field="before"`.
+Do not create separate scroll components. The explore view uses `data-cursor-param="max_id"` / `data-cursor-field="maxId"` (Mastodon API conventions).
 
-### 27. Quote Embeds and Enrichment
+### 25. Quote Embeds and Enrichment
 
-Posts that quote another post (Mastodon quote feature via FEP-044f) are rendered with an embedded card showing the quoted post's author, content, and timestamp. The data flow:
+1. **Ingest:** `extractObjectData()` reads `object.quoteUrl` (handles `as:quoteUrl`, `misskey:_misskey_quote`, `fedibird:quoteUri`)
+2. **Enrichment:** `fetchAndStoreQuote()` in `og-unfurl.js` fetches via `ctx.lookupObject()`, stores as `quote` on timeline item
+3. **On-demand:** `post-detail.js` fetches quotes for items with `quoteUrl` but no stored `quote` data
+4. **Rendering:** `partials/ap-quote-embed.njk`; `stripQuoteReferences()` removes duplicate inline `RE: <link>`
 
-1. **Ingest:** `extractObjectData()` reads `object.quoteUrl` (Fedify reads `as:quoteUrl`, `misskey:_misskey_quote`, `fedibird:quoteUri`)
-2. **Enrichment:** `fetchAndStoreQuote()` in `og-unfurl.js` fetches the quoted post via `ctx.lookupObject()`, extracts data with `extractObjectData()`, and stores it as `quote` on the timeline item
-3. **On-demand:** `post-detail.js` fetches quotes on demand for items that have `quoteUrl` but no stored `quote` data (pre-existing items)
-4. **Rendering:** `partials/ap-quote-embed.njk` renders the embedded card; `stripQuoteReferences()` removes the inline `RE: <link>` paragraph to avoid duplication
+### 26. Async Inbox Processing (v2.14.0+)
 
-### 28. Async Inbox Processing (v2.14.0+)
+`inbox-listeners.js` persists activities to `ap_inbox_queue`; `inbox-handlers.js` processes them asynchronously. Reply forwarding (`ctx.forwardActivity()`) happens synchronously in `inbox-listeners.js` because `forwardActivity()` is only available on `InboxContext`.
 
-Inbound activities follow a two-stage pattern: `inbox-listeners.js` receives activities from Fedify, persists them to `ap_inbox_queue`, then `inbox-handlers.js` processes them asynchronously. This ensures no data loss if the server crashes mid-processing. Reply forwarding (`ctx.forwardActivity()`) happens synchronously in `inbox-listeners.js` because `forwardActivity()` is only available on `InboxContext`, not the base `Context` used by the queue processor.
+### 27. Outbox Delivery Failure Handling (v2.15.0+)
 
-### 29. Outbox Delivery Failure Handling (v2.15.0+)
+`lib/outbox-failure.js` via `setOutboxPermanentFailureHandler`:
+- **410 Gone** → Immediate full cleanup: deletes from `ap_followers`, `ap_timeline` (by `author.url`), `ap_notifications` (by `actorUrl`)
+- **404 Not Found** → Strike system: 3 strikes over 7+ days triggers same full cleanup
+- **Strike reset** → `resetDeliveryStrikes()` called after every inbound activity (except Block)
 
-`lib/outbox-failure.js` handles permanent delivery failures reported by Fedify's `setOutboxPermanentFailureHandler`:
+### 28. Reply Chain Fetching and Reply Forwarding (v2.15.0+)
 
-- **410 Gone** → Immediate full cleanup: deletes follower from `ap_followers`, their items from `ap_timeline` (by `author.url`), their notifications from `ap_notifications` (by `actorUrl`)
-- **404 Not Found** → Strike system: increments `deliveryFailures` on the follower doc, sets `firstFailureAt` via `$setOnInsert`. After 3 strikes over 7+ days, triggers the same full cleanup as 410
-- **Strike reset** → `resetDeliveryStrikes()` is called in `inbox-listeners.js` after `touchKeyFreshness()` for every inbound activity type (except Block). If an actor is sending us activities, they're alive — `$unset` the strike fields
+- `fetchReplyChain()`: recursively fetches parent posts up to 5 levels via `object.getReplyTarget()`, stored with `isContext: true` using `$setOnInsert` upsert
+- Reply forwarding: Create replies to our posts (checked via `inReplyTo.startsWith(publicationUrl)`) addressed to the public collection are forwarded to our followers via `ctx.forwardActivity()`
 
-### 30. Reply Chain Fetching and Reply Forwarding (v2.15.0+)
+### 29. Write-Time Visibility Classification (v2.15.0+)
 
-- `fetchReplyChain()` in `inbox-handlers.js`: When a reply arrives, recursively fetches parent posts up to 5 levels deep using `object.getReplyTarget()`. Ancestors are stored with `isContext: true` flag. Uses `$setOnInsert` upsert so re-fetching ancestors is a no-op.
-- Reply forwarding in `inbox-listeners.js`: When a Create activity is a reply to one of our posts (checked via `inReplyTo.startsWith(publicationUrl)`) and is addressed to the public collection, calls `ctx.forwardActivity()` to re-deliver the reply to our followers' inboxes.
+`computeVisibility(object)` classifies at ingest time: `to` includes Public → `"public"`, `cc` includes Public → `"unlisted"`, neither → `"private"`/`"direct"`. Stored as `visibility` on `ap_timeline` docs.
 
-### 31. Write-Time Visibility Classification (v2.15.0+)
+### 30. Server Blocking (v2.14.0+)
 
-`computeVisibility(object)` in `inbox-handlers.js` classifies posts at ingest time based on `to`/`cc` fields:
-- `to` includes `https://www.w3.org/ns/activitystreams#Public` → `"public"`
-- `cc` includes Public → `"unlisted"`
-- Neither → `"private"` or `"direct"` (based on whether followers collection is in `to`)
+`lib/storage/server-blocks.js` manages `ap_blocked_servers`. Inbound activities from blocked domains are rejected in `inbox-listeners.js` before processing.
 
-The `visibility` field is stored on `ap_timeline` documents for future filtering.
+### 31. Key Freshness Tracking (v2.14.0+)
 
-### 32. Server Blocking (v2.14.0+)
+`touchKeyFreshness()` in `lib/key-refresh.js` is called for every inbound activity, tracking when keys were last verified to skip redundant re-fetches.
 
-`lib/storage/server-blocks.js` manages domain-level blocks stored in `ap_blocked_servers`. When a server is blocked, all inbound activities from that domain are rejected in `inbox-listeners.js` before any processing occurs. The `federation-mgmt.js` controller provides the admin UI.
+### 32. Mastodon Client API — Architecture (v3.0.0+)
 
-### 33. Key Freshness Tracking (v2.14.0+)
-
-`lib/key-refresh.js` tracks when remote actor keys were last verified in `ap_key_freshness`. `touchKeyFreshness()` is called for every inbound activity. This allows skipping redundant key re-fetches for actors we've recently verified, reducing network round-trips.
-
-### 34. Mastodon Client API — Architecture (v3.0.0+)
-
-The Mastodon Client API is mounted at `/` (domain root) via `Indiekit.addEndpoint()` to serve `/api/v1/*`, `/api/v2/*`, and `/oauth/*` endpoints that Mastodon-compatible clients expect.
+Mounted at `/` (domain root) to serve `/api/v1/*`, `/api/v2/*`, `/oauth/*`.
 
 **Key design decisions:**
+- **Published-date pagination** — Status IDs are `encodeCursor(published)` (ms since epoch), NOT MongoDB ObjectIds
+- **Status lookup** — `findTimelineItemById()` must try both `"2026-03-21T15:33:50.000Z"` and `"2026-03-21T15:33:50Z"` (stored dates vary)
+- **Own-post detection** — `setLocalIdentity(publicationUrl, handle)` at init; `serializeAccount()` compares `author.url === publicationUrl`
+- **Account enrichment** — Phanpy never calls `/accounts/:id` for timeline authors; `enrichAccountStats()` batch-resolves via Fedify, cached (500 entries, 1h TTL)
+- **OAuth for native apps** — Android Custom Tabs block 302 redirects to custom URI schemes; use HTML page with JS `window.location` redirect
+- **OAuth token storage** — MUST NOT set `accessToken: null` — use field absence (sparse unique indexes skip absent fields but enforce uniqueness on explicit `null`)
+- **Route ordering** — `/accounts/relationships` and `/accounts/familiar_followers` MUST be defined BEFORE `/accounts/:id`
+- **Unsigned fallback** — `lookupWithSecurity()` tries authenticated GET first, falls back to unsigned (some servers reject signed GETs with 400)
+- **Backfill** — `backfill-timeline.js` converts Micropub posts → `ap_timeline` with content synthesis, hashtag extraction, absolute URL resolution
 
-- **Published-date pagination** — Status IDs are `encodeCursor(published)` (ms since epoch), NOT MongoDB ObjectIds. This ensures chronological timeline sort regardless of insertion order (backfilled posts get new ObjectIds but retain original published dates).
-- **Status lookup** — `findTimelineItemById()` decodes cursor → published date → MongoDB lookup. Must try both `"2026-03-21T15:33:50.000Z"` (with ms) and `"2026-03-21T15:33:50Z"` (without) because stored dates vary.
-- **Own-post detection** — `setLocalIdentity(publicationUrl, handle)` called at init. `serializeAccount()` compares `author.url === publicationUrl` to pass `isLocal: true`.
-- **Account enrichment** — Phanpy never calls `/accounts/:id` for timeline authors. `enrichAccountStats()` batch-resolves unique authors via Fedify after serialization, cached in memory (500 entries, 1h TTL).
-- **OAuth for native apps** — Android Custom Tabs block 302 redirects to custom URI schemes (`moshidon-android-auth://`, `fedilab://`). Use HTML page with JS `window.location` redirect instead.
-- **OAuth token storage** — Auth code documents MUST NOT set `accessToken: null` — use field absence. MongoDB sparse unique indexes skip absent fields but enforce uniqueness on explicit `null`.
-- **Route ordering** — `/accounts/relationships` and `/accounts/familiar_followers` MUST be defined BEFORE `/accounts/:id` in Express, otherwise `:id` matches "relationships" as a parameter.
-- **Unsigned fallback** — `lookupWithSecurity()` tries authenticated (signed) GET first, falls back to unsigned if it fails. Some servers (tags.pub) reject signed GETs with 400.
-- **Backfill** — `backfill-timeline.js` runs on startup, converts Micropub posts → `ap_timeline` format with content synthesis (bookmarks → "Bookmarked: URL"), hashtag extraction, and absolute URL resolution.
+### 33. Mastodon API — Content Processing (v3.9.4+)
 
-### 35. Mastodon API — Content Processing (v3.9.4+)
+`POST /api/v1/statuses` sends content to Micropub as `{ text, html }` with pre-linkified URLs. `@user@domain` mentions are preserved as plain text for WebFinger resolution by the AP syndicator. No `ap_timeline` entry is created immediately — post appears after the syndication round-trip. `mp-syndicate-to` is set to AP syndicator UID.
 
-When creating posts via `POST /api/v1/statuses`:
-- Content is provided to Micropub as `{ text, html }` with pre-linkified URLs (Micropub's markdown-it doesn't have `linkify: true`)
-- `@user@domain` mentions are preserved as plain text — the AP syndicator resolves them via WebFinger for federation delivery
-- Content warnings use `content-warning` field (not `summary`) to match the native reader and AP syndicator expectations
-- No `ap_timeline` entry is created — the post appears in the timeline after the syndication round-trip (Eleventy rebuild → syndication webhook → AP delivery → inbox)
-- A minimal Mastodon Status object is returned immediately to the client for UI feedback
-- `mp-syndicate-to` is set to the AP syndicator UID (posts from Mastodon clients syndicate to fediverse only)
+### 34. WORKAROUND: Direct Follow for tags.pub (v3.8.4+)
 
-**Previous behavior (pre-3.9.4):** The handler created an `ap_timeline` entry immediately and used `processStatusContent()` to linkify URLs with hardcoded `/@username` patterns. This caused: (1) posts appearing in timeline before syndication, (2) broken mention URLs for non-Mastodon servers, (3) links lost in the Micropub content file.
+**File:** `lib/direct-follow.js`
+**Upstream issue:** [tags.pub#10](https://github.com/social-web-foundation/tags.pub/issues/10) — OPEN
+**Remove when:** tags.pub handles `https://w3id.org/identity/v1` context gracefully.
+
+Fedify 2.0 hoists `RsaSignature2017`'s `@context` into the top-level `@context` array. tags.pub's AS2 parser rejects this with `400 Invalid request body`. `lib/direct-follow.js` sends Follow/Undo(Follow) with minimal JSON (standard AS2 context only, draft-cavage HTTP Signatures). `DIRECT_FOLLOW_HOSTS` controls which hostnames use this path. `followActor()`/`unfollowActor()` in `index.js` check `needsDirectFollow(actorUrl)` before sending.
+
+**How to revert:** Remove `needsDirectFollow()` checks from `followActor()`/`unfollowActor()`, remove `_loadRsaPrivateKey()`, remove `direct-follow.js` import and file.
+
+Note: tags.pub does not send `Accept(Follow)` back and `@_followback@tags.pub` does not send Follow activities — outbound delivery from tags.pub appears broken.
+
+### 35. Unverified Delete Activities (Fedify 2.1.0+)
+
+`onUnverifiedActivity()` in `federation-setup.js` handles Delete activities from actors whose keys return 404/410. Checks `reason.type === "keyFetchError"` with status 404/410, cleans up actor data, returns 202.
+
+### 36. FEP-8fcf Collection Synchronization — Outbound Only
+
+`syncCollection: true` on `sendActivity()` attaches `Collection-Synchronization` headers. The **receiving side** (parsing inbound headers, reconciliation) is NOT implemented. Full compliance would require a `/followers-sync` endpoint.
 
 ## Date Handling Convention
 
-**All dates MUST be stored as ISO 8601 strings.** This is mandatory across all Indiekit plugins.
+**All dates MUST be stored as ISO 8601 strings.** The Nunjucks `| date` filter calls `date-fns parseISO()` which only accepts ISO strings — `Date` objects cause `"dateString.split is not a function"` crashes.
 
 ```javascript
 // CORRECT
 followedAt: new Date().toISOString()
 published: String(fedifyObject.published)  // Temporal → string
 
-// WRONG — crashes Nunjucks | date filter
+// WRONG
 followedAt: new Date()
 published: new Date(fedifyObject.published)
 ```
 
-The Nunjucks `| date` filter calls `date-fns parseISO()` which only accepts ISO strings. `Date` objects cause `"dateString.split is not a function"` crashes.
-
 ## Batch Re-follow State Machine
 
 ```
-import → refollow:pending → refollow:sent → federation  (happy path: Accept received)
-import → refollow:pending → refollow:sent → refollow:failed (after 3 retries)
+import → refollow:pending → refollow:sent → federation  (Accept received)
+import → refollow:pending → refollow:sent → refollow:failed (3 retries exceeded)
 ```
 
-- `import`: Imported from Mastodon CSV, no Follow sent yet
-- `refollow:pending`: Claimed by batch processor, being processed
-- `refollow:sent`: Follow activity sent, awaiting Accept
-- `federation`: Accept received, fully federated
-- `refollow:failed`: Max retries exceeded
-
-On restart, `refollow:pending` entries are reset to `import` to prevent stale claims.
+On restart, `refollow:pending` entries reset to `import` to prevent stale claims.
 
 ## Plugin Lifecycle
 
@@ -501,7 +451,6 @@ On restart, `refollow:pending` entries are reset to `import` to prevent stale cl
 | `POST` | `{mount}/admin/reader/mute,unmute,block,unblock` | Moderation actions | Yes |
 | `GET/POST` | `{mount}/admin/reader/messages` | Direct messages | Yes |
 | `GET/POST` | `{mount}/admin/follow-requests` | Manual follow approval | Yes |
-| `POST` | `{mount}/admin/reader/follow-tag,unfollow-tag` | Follow/unfollow hashtag | Yes |
 | `GET/POST` | `{mount}/admin/federation` | Server blocking management | Yes |
 | `GET` | `{mount}/admin/followers,following,activities` | Lists | Yes |
 | `GET/POST` | `{mount}/admin/profile` | Actor profile editor | Yes |
@@ -510,7 +459,7 @@ On restart, `refollow:pending` entries are reset to `import` to prevent stale cl
 | `GET/POST` | `{mount}/admin/migrate` | Mastodon migration | Yes |
 | `*` | `{mount}/admin/refollow/*` | Batch refollow control | Yes |
 | `*` | `{mount}/__debug__/*` | Fedify debug dashboard (if enabled) | Password |
-| `GET` | `{mount}/api/ap-url?post={url}` | Resolve blog post URL → AP object URL (for "Also on Fediverse" widget) | No |
+| `GET` | `{mount}/api/ap-url?post={url}` | Resolve blog post URL → AP object URL | No |
 | `GET` | `{mount}/users/:identifier` | Public profile page (HTML fallback) | No |
 | `GET` | `/*` (root) | Content negotiation (AP clients only) | No |
 | | **Mastodon Client API (mounted at `/`)** | |
@@ -520,17 +469,17 @@ On restart, `refollow:pending` entries are reset to `import` to prevent stale cl
 | `POST` | `/oauth/token` | Token exchange | No |
 | `POST` | `/oauth/revoke` | Revoke token | No |
 | `GET` | `/api/v1/accounts/verify_credentials` | Current user | Bearer |
-| `GET` | `/api/v1/accounts/lookup` | Account lookup (with Fedify remote resolution) | Bearer |
+| `GET` | `/api/v1/accounts/lookup` | Account lookup | Bearer |
 | `GET` | `/api/v1/accounts/relationships` | Follow/block/mute state | Bearer |
-| `GET` | `/api/v1/accounts/:id` | Account details (with remote AP collection counts) | Bearer |
+| `GET` | `/api/v1/accounts/:id` | Account details | Bearer |
 | `GET` | `/api/v1/accounts/:id/statuses` | Account posts | Bearer |
 | `POST` | `/api/v1/accounts/:id/follow,unfollow` | Follow/unfollow via Fedify | Bearer |
 | `POST` | `/api/v1/accounts/:id/block,unblock,mute,unmute` | Moderation | Bearer |
-| `GET` | `/api/v1/timelines/home,public,tag/:hashtag` | Timelines (published-date sort) | Bearer |
+| `GET` | `/api/v1/timelines/home,public,tag/:hashtag` | Timelines | Bearer |
 | `GET/POST` | `/api/v1/statuses` | Get/create status (via Micropub pipeline) | Bearer |
 | `GET` | `/api/v1/statuses/:id/context` | Thread (ancestors + descendants) | Bearer |
 | `POST` | `/api/v1/statuses/:id/favourite,reblog,bookmark` | Interactions via Fedify | Bearer |
-| `GET` | `/api/v1/notifications` | Notifications with type filtering | Bearer |
+| `GET` | `/api/v1/notifications` | Notifications | Bearer |
 | `GET` | `/api/v2/search` | Search with remote resolution | Bearer |
 | `GET` | `/api/v1/domain_blocks` | Blocked server domains | Bearer |
 | `GET` | `/api/v1/instance`, `/api/v2/instance` | Instance info | No |
@@ -580,78 +529,36 @@ On restart, `refollow:pending` entries are reset to `import` to prevent stale cl
   activityRetentionDays: 90,         // TTL for ap_activities (0 = forever)
   storeRawActivities: false,         // Store full JSON of inbound activities
   redisUrl: "",                      // Redis for delivery queue (empty = in-process)
-  parallelWorkers: 5,               // Parallel delivery workers (with Redis)
-  actorType: "Person",              // Person | Service | Organization | Group
-  logLevel: "warning",             // Fedify log level: debug | info | warning | error | fatal
-  timelineRetention: 1000,          // Max timeline items (0 = unlimited)
-  notificationRetentionDays: 30,    // Days to keep notifications (0 = forever)
-  debugDashboard: false,            // Enable @fedify/debugger dashboard at {mount}/__debug__/
-  debugPassword: "",                // Password for debug dashboard (required if dashboard enabled)
+  parallelWorkers: 5,                // Parallel delivery workers (with Redis)
+  actorType: "Person",               // Person | Service | Organization | Group
+  logLevel: "warning",               // Fedify log level: debug | info | warning | error | fatal
+  timelineRetention: 1000,           // Max timeline items (0 = unlimited)
+  notificationRetentionDays: 30,     // Days to keep notifications (0 = forever)
+  debugDashboard: false,             // Enable @fedify/debugger dashboard at {mount}/__debug__/
+  debugPassword: "",                 // Password for debug dashboard (required if enabled)
 }
 ```
 
 ## Publishing Workflow
 
-1. Edit code in this repo
-2. Bump version in `package.json` (npm rejects duplicate versions)
-3. Commit and push
-4. **STOP** — user must run `npm publish` manually (requires OTP)
-5. After publish confirmation, update Dockerfile version in `indiekit-cloudron/`
-6. `cloudron build --no-cache && cloudron update --app rmendes.net --no-backup`
+1. Bump version in `package.json`
+2. Commit and push
+3. **STOP** — user must run `npm publish` manually (requires OTP)
+4. After publish confirmation, update Dockerfile version in `indiekit-cloudron/`
+5. `cloudron build --no-cache && cloudron update --app rmendes.net --no-backup`
 
 ## Testing
 
 No automated test suite. Manual testing against real fediverse servers:
 
 ```bash
-# WebFinger
 curl -s "https://rmendes.net/.well-known/webfinger?resource=acct:rick@rmendes.net" | jq .
-
-# Actor document
 curl -s -H "Accept: application/activity+json" "https://rmendes.net/" | jq .
-
-# NodeInfo
 curl -s "https://rmendes.net/nodeinfo/2.1" | jq .
-
 # Search from Mastodon for @rick@rmendes.net
 ```
 
-### 36. WORKAROUND: Direct Follow for tags.pub (v3.8.4+)
-
-**File:** `lib/direct-follow.js`
-**Upstream issue:** [tags.pub#10](https://github.com/social-web-foundation/tags.pub/issues/10) — OPEN
-**Remove when:** tags.pub registers `https://w3id.org/identity/v1` as a known context in `activitypub-bot`'s `lib/activitystreams.js`, OR switches to a JSON-LD parser that handles unknown contexts gracefully.
-
-**Problem:** Fedify 2.0 adds Linked Data Signatures (`RsaSignature2017`) to all outbound activities. The signature object embeds `"@context": "https://w3id.org/identity/v1"`, which gets hoisted into the top-level `@context` array. tags.pub's `activitypub-bot` uses the `activitystrea.ms` AS2 parser, which rejects any activity containing this context with `400 Invalid request body`. This affects ALL Fedify 2.0 servers, not just us.
-
-**Workaround:** `lib/direct-follow.js` sends Follow/Undo(Follow) activities with a minimal JSON body (standard AS2 context only, no LD Signature, no Data Integrity Proof) signed with draft-cavage HTTP Signatures. The `DIRECT_FOLLOW_HOSTS` set controls which hostnames use this path (currently only `tags.pub`).
-
-**Integration:** `followActor()` and `unfollowActor()` in `index.js` check `needsDirectFollow(actorUrl)` before sending. For matching hosts, they load the RSA private key from `ap_keys` via `_loadRsaPrivateKey()` and use `sendDirectFollow()`/`sendDirectUnfollow()` instead of Fedify's `ctx.sendActivity()`. All other servers use the normal Fedify pipeline unchanged.
-
-**How to revert:** When the upstream fix lands:
-1. Remove the `needsDirectFollow()` checks from `followActor()` and `unfollowActor()` in `index.js`
-2. Remove the `_loadRsaPrivateKey()` method from the plugin class
-3. Remove the `import` of `direct-follow.js` from `index.js`
-4. Delete `lib/direct-follow.js`
-5. Remove `tags.pub` from any test/documentation references to the workaround
-6. Verify by following a tags.pub hashtag actor and confirming the normal Fedify path succeeds
-
-**Additional tags.pub issues (not fixable on our side):**
-- tags.pub does not send `Accept(Follow)` activities back to our inbox
-- `@_followback@tags.pub` does not send Follow activities back despite accepting ours
-- Both suggest tags.pub's outbound delivery is broken — zero inbound requests from `activitypub-bot` user-agent have been observed
-
-### 37. Unverified Delete Activities (Fedify 2.1.0+)
-
-`onUnverifiedActivity()` in `federation-setup.js` handles Delete activities from actors whose signing keys return 404/410. When an account is permanently deleted, the remote server sends a Delete activity but the actor's key endpoint is gone, so HTTP Signature verification fails. The handler checks `reason.type === "keyFetchError"` with status 404/410, cleans up the actor's data (followers, timeline items, notifications), and returns 202 Accepted.
-
-### 38. FEP-8fcf Collection Synchronization — Outbound Only
-
-We pass `syncCollection: true` to Fedify's `sendActivity()` for outbound activities, which attaches `Collection-Synchronization` headers with partial follower digests (XOR'd SHA-256 hashes). However, the **receiving side** (parsing inbound headers, digest comparison, reconciliation) is NOT implemented by Fedify or by us. Remote servers that send Collection-Synchronization headers to us will have them ignored. Full FEP-8fcf compliance would require a `/followers-sync` endpoint and a reconciliation scheduler.
-
 ## Form Handling Convention
-
-Two form patterns are used in this plugin. New forms should follow the appropriate pattern.
 
 ### Pattern 1: Traditional POST (data mutation forms)
 
@@ -660,8 +567,8 @@ Used for: compose, profile editor, migration alias, notification mark-read/clear
 - Standard `<form method="POST" action="...">`
 - CSRF via `<input type="hidden" name="_csrf" value="...">`
 - Server processes, then redirects (PRG pattern)
-- Success/error feedback via Indiekit's notification banner system
-- Uses Indiekit form macros (`input`, `textarea`, `button`) where available
+- Feedback via Indiekit's notification banner system
+- Uses Indiekit form macros where available
 
 ### Pattern 2: Alpine.js Fetch (in-page CRUD operations)
 
@@ -670,62 +577,30 @@ Used for: moderation add/remove keyword/server, tab management, federation actio
 - Alpine.js `@submit.prevent` or `@click` handlers
 - CSRF via `X-CSRF-Token` header in `fetch()` call
 - Inline error display with `x-show="error"` and `role="alert"`
-- Optimistic UI with rollback on failure
-- No page reload — DOM updates in place
+- Optimistic UI with rollback on failure; no page reload
 
-### Rules
-
-- Do NOT mix patterns on the same page (one pattern per form)
-- All forms MUST include CSRF protection (hidden field OR header)
-- Error feedback: Pattern 1 uses redirect + banner, Pattern 2 uses inline `x-show="error"`
-- Success feedback: Pattern 1 uses redirect + banner, Pattern 2 uses inline DOM update or element removal
+**Rules:** Do NOT mix patterns on the same page. All forms MUST include CSRF protection. Pattern 1: redirect + banner for feedback. Pattern 2: inline DOM updates.
 
 ## CSS Conventions
 
-The reader CSS (`assets/reader.css`) uses Indiekit's theme custom properties for automatic dark mode support:
+`assets/reader.css` uses Indiekit's theme custom properties:
 - `--color-on-background` (not `--color-text`)
 - `--color-on-offset` (not `--color-text-muted`)
 - `--border-radius-small` (not `--border-radius`)
 - `--color-red45`, `--color-green50`, etc. (not hardcoded hex)
 
-Post types are differentiated by left border color: purple (notes), green (articles), yellow (boosts), primary (replies).
+Post types: left border — purple (notes), green (articles), yellow (boosts), primary (replies).
 
 ## svemagie Fork — Changes vs Upstream
 
-This fork (`svemagie/indiekit-endpoint-activitypub`) extends the upstream `rmdes/indiekit-endpoint-activitypub` with the following changes. All additions are motivated by strict ActivityPub protocol compliance and real-world interoperability with Mastodon.
+This fork extends `rmdes/indiekit-endpoint-activitypub`. All changes are for AP protocol compliance and Mastodon interoperability.
 
-### 1. `allowPrivateAddress: true` in `createFederation` (`lib/federation-setup.js`)
+1. **`allowPrivateAddress: true`** in `createFederation` (`lib/federation-setup.js`) — allows own-site `lookupObject()` when hostname resolves to a private RFC-1918 address on the LAN.
 
-**Problem:** When the blog hostname resolves to a private RFC-1918 address (e.g. `10.x.x.x`) from within the local network where the server runs, Fedify's built-in SSRF guard throws `"Disallowed private URL"` for own-site lookups. This breaks `lookupObject()` and WebFinger for posts on the same site.
+2. **Canonical `id` on Like activities** (`lib/jf2-to-as2.js`) — derives mount path from actor URL and constructs id at `{publicationUrl}{mountPath}/activities/like/{post-relative-path}` per AP §6.2.1.
 
-**Fix:** `allowPrivateAddress: true` is passed to `createFederation`. This disables the SSRF IP check so Fedify can dereference own-site URLs that happen to resolve to private IPs on the LAN.
+3. **Like activity dispatcher** (`lib/federation-setup.js`) — `federation.setObjectDispatcher(Like, ...)` makes Like ids dereferenceable per AP §3.1.
 
-### 2. Canonical `id` on Like activities (`lib/jf2-to-as2.js`)
+4. **Repost commentary** (`lib/jf2-to-as2.js`) — reposts with `properties.content` fall through to `Create(Note)` instead of bare `Announce`, formatting as `{commentary}<br><br>🔁 <url>`. Pure reposts keep `Announce` behaviour. `jf2ToActivityStreams` also extracts commentary.
 
-**Problem:** Per ActivityPub §6.2.1, activities sent from a server SHOULD carry an `id` URI so that remote servers can dereference them. The `Like` activity produced by `jf2ToAS2Activity` had no `id`, which meant remote servers couldn't look it up by URL.
-
-**Fix:** `jf2ToAS2Activity` derives the mount path from the actor URL (`/activitypub/users/sven` → `/activitypub`) and constructs a canonical id at `{publicationUrl}{mountPath}/activities/like/{post-relative-path}`.
-
-### 3. Like activity dispatcher (`lib/federation-setup.js`)
-
-**Problem:** Per ActivityPub §3.1, objects with an `id` MUST be dereferenceable at that URI. With canonical ids added (change 2), requests to `/activitypub/activities/like/{id}` would 404 because no Fedify dispatcher was registered for that path pattern.
-
-**Fix:** `Like` is added to the `@fedify/fedify/vocab` imports and a `federation.setObjectDispatcher(Like, ...)` is registered after the Article dispatcher in `setupObjectDispatchers`. The handler looks up the post in MongoDB, filters drafts/unlisted/deleted, calls `jf2ToAS2Activity`, and returns the `Like` if that's what was produced.
-
-### 4. Repost commentary in ActivityPub output (`lib/jf2-to-as2.js`)
-
-**Problem (two bugs):**
-1. `jf2ToAS2Activity` always returned a bare `Announce { object: <external-url> }` for reposts, even when the post had author commentary. External URLs (e.g. fromjason.xyz) don't serve AP JSON, so Mastodon received the `Announce` but couldn't fetch the object — the activity was silently dropped from followers' timelines.
-2. `jf2ToActivityStreams` (used for content negotiation/search) returned a `Note` whose `content` was hardcoded to `🔁 <url>`, ignoring any commentary text.
-
-**Fix:**
-- `jf2ToAS2Activity`: if the repost has commentary (`properties.content`), skip the early `Announce` return and fall through to the `Create(Note)` path — the note content block now has a `repost` branch that formats the content as `{commentary}<br><br>🔁 <url>`. Pure reposts (no commentary) keep the `Announce` behaviour.
-- `jf2ToActivityStreams`: extracts `commentary` from `properties.content` and prepends it to the note content when present.
-
-### 5. `/api/ap-url` public endpoint (`index.js`)
-
-**Problem:** The "Also on Fediverse" widget on blog post pages passes the blog post URL to Mastodon's `authorize_interaction` flow. When the remote instance fetches that URL with `Accept: application/activity+json`, it may hit nginx (which serves static HTML), causing "Could not connect to the given address" errors.
-
-**Fix:** A public `GET /api/ap-url?post={blog-post-url}` route is added to `routesPublic`. It resolves the post in MongoDB, determines its AP object type, and returns the canonical Fedify-served URL (`/activitypub/objects/note/{path}` or `/activitypub/objects/article/{path}`). These paths are always proxied to Node.js and reliably return AP JSON.
-
-**Special case — AP-likes:** When `like-of` points to an ActivityPub URL (e.g. a Mastodon status), the endpoint detects it via a HEAD request with `Accept: application/activity+json` and returns `{ apUrl: likeOf }` instead. This causes the `authorize_interaction` flow to open the *original remote post* (where the user can like/boost/reply natively) rather than the blog's own representation of the like.
+5. **`/api/ap-url` public endpoint** (`index.js`) — resolves blog post URL → canonical Fedify-served AP URL for the "Also on Fediverse" widget. For AP-like posts (like-of points to an AP URL), returns `{ apUrl: likeOf }` to open the original remote post.
