@@ -390,6 +390,66 @@ Note: tags.pub does not send `Accept(Follow)` back and `@_followback@tags.pub` d
 
 `syncCollection: true` on `sendActivity()` attaches `Collection-Synchronization` headers. The **receiving side** (parsing inbound headers, reconciliation) is NOT implemented. Full compliance would require a `/followers-sync` endpoint.
 
+### 36. Mastodon API — Status IDs and Threading (v3.12.0+)
+
+**Status IDs are MongoDB ObjectId hex strings** (`_id.toString()`), NOT published-date cursors. This guarantees uniqueness — the previous cursor-based IDs (`encodeCursor(published)`) caused collisions when multiple posts shared the same second, resulting in `findTimelineItemById` returning wrong documents.
+
+**Key behaviors:**
+- `findTimelineItemById` does ObjectId-only lookup — no date parsing, no ambiguity
+- `in_reply_to_id` and `in_reply_to_account_id` are batch-resolved via `resolve-reply-ids.js` using parent's `_id.toString()` and `remoteActorId(author.url)`
+- Pagination uses ObjectId ordering (`{ _id: -1 }`) — ObjectIds have a 4-byte timestamp prefix so chronological sort works
+- `encodeCursor`/`decodeCursor` removed from the API layer entirely
+
+### 37. Mastodon API — Own Post Handling (v3.10.1+)
+
+Own posts are added to `ap_timeline` by the AP syndicator after successful delivery. The syndicator:
+- Builds content from JF2 properties via `buildTimelineContent()` (synthesizes content for likes/bookmarks/reposts)
+- Linkifies `@mentions` using WebFinger-resolved profile URLs
+- Stores resolved mentions with `actorUrl` for proper serialization
+
+**Read-time enrichment by `serializeStatus`:**
+- **Permalink** — appended for own posts (detected via `author.url === _localPublicationUrl`). Matches the `🔗` link in federated AS2 content. Done at read time so it survives timeline cleanup/backfill.
+- **`@mention` links** — stored at write time on the `ap_timeline` entry with resolved `actorUrl` for deterministic Mastodon account IDs.
+
+### 38. Mastodon API — Access Tokens (v3.12.4+)
+
+**Access tokens do not expire.** They are valid until revoked, matching Mastodon's behavior. The previous 1-hour TTL caused Phanpy/Elk/Moshidon sessions to break silently. Refresh tokens expire after 90 days.
+
+### 39. Mastodon API — Timeline Filtering (v3.12.5+)
+
+**Reply filtering:** Public and hashtag timelines exclude replies (`inReplyTo: { $exists: false }`). Replies only appear in the context/thread view and the home timeline. This matches Mastodon/Pixelfed behavior.
+
+**Home timeline reply visibility (DEFERRED):** Mastodon only shows replies in the home timeline when the user follows BOTH the replier AND the person being replied to. Our home timeline currently shows all replies from followed accounts regardless. Implementing this requires loading the following list and cross-checking each reply's target author — an expensive join per timeline load. Tracked as a future improvement.
+
+**Keyword filters:** The filters CRUD (`GET/POST/PUT/DELETE /api/v2/filters`) stores filters in `ap_filters` with keywords in `ap_filter_keywords`. `apply-filters.js` loads active filters per context, compiles keyword regexes, and applies them after status serialization:
+- `filterAction: "hide"` — status removed from response
+- `filterAction: "warn"` — status kept with `filtered` array attached (Mastodon v2 format)
+
+### 40. Admin Settings Page (v3.13.0+)
+
+**Route:** `GET/POST {mountPath}/admin/settings`
+
+All configurable values are stored in a single MongoDB document in `ap_settings` collection. `lib/settings.js` provides `getSettings(collections)` which merges DB values over hardcoded defaults — missing keys always fall back.
+
+**Settings by section:**
+
+| Section | Keys |
+|---|---|
+| Instance & Client API | `instanceLanguages`, `maxCharacters`, `maxMediaAttachments`, `defaultVisibility`, `defaultLanguage` |
+| Federation & Delivery | `timelineRetention`, `notificationRetentionDays`, `activityRetentionDays`, `replyChainDepth`, `broadcastBatchSize`, `broadcastBatchDelay`, `parallelWorkers`, `logLevel` |
+| Migration | `refollowBatchSize`, `refollowDelay`, `refollowBatchDelay` |
+| Security | `refreshTokenTtlDays` |
+
+**How consumers read settings:**
+- Mastodon API routes: `req.app.locals.apSettings` (cached 1 minute by `load-settings.js` middleware)
+- Non-API code (federation, inbox, batch): `await getSettings(collections)` directly
+
+**Adding a new setting:**
+1. Add to `DEFAULTS` in `lib/settings.js`
+2. Add parsing in `lib/controllers/settings.js` POST handler
+3. Add form field in `views/activitypub-settings.njk`
+4. Wire into the consumer file with `settings.newKey` lookup
+
 ## Date Handling Convention
 
 **All dates MUST be stored as ISO 8601 strings.** The Nunjucks `| date` filter calls `date-fns parseISO()` which only accepts ISO strings — `Date` objects cause `"dateString.split is not a function"` crashes.
@@ -538,6 +598,15 @@ On restart, `refollow:pending` entries reset to `import` to prevent stale claims
   debugPassword: "",                 // Password for debug dashboard (required if enabled)
 }
 ```
+
+## Startup Gate
+
+This plugin uses `@rmdes/indiekit-startup-gate` to defer background tasks until the host signals readiness (after Eleventy build completes). This prevents resource contention during the build.
+
+**Deferred:** `startBatchRefollow()`, `scheduleCleanup()`, `loadBlockedServersToRedis()`, `scheduleKeyRefresh()`, timeline backfill, `startInboxProcessor()`
+**Immediate:** Routes, federation context, inbox HTTP handlers, `runSeparateMentionsMigration()`
+
+See workspace CLAUDE.md for the full startup-gate pattern. Any new background tasks added to this plugin MUST be wrapped in `waitForReady()`. Inbox routes MUST remain immediate — they receive inbound federation traffic regardless of build state.
 
 ## Publishing Workflow
 

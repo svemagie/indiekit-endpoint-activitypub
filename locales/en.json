@@ -333,6 +333,9 @@
       "deleteSuccess": "Delete activity sent to followers",
       "deleteButton": "Delete from fediverse"
     },
+    "settings": {
+      "title": "Settings"
+    },
     "federationMgmt": {
       "title": "Federation",
       "collections": "Collection health",
