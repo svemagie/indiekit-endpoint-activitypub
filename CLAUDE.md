@@ -57,36 +57,41 @@ index.js                          ← Plugin entry, route registration, lifecycl
 │   ├── backfill-timeline.js      ← Startup backfill: posts collection → ap_timeline
 │   ├── entities/                 ← Mastodon JSON entity serializers
 │   │   ├── account.js            ← Account entity (local + remote, with stats cache enrichment)
-│   │   ├── status.js             ← Status entity (published-based cursor IDs, own-post detection)
+│   │   ├── status.js             ← Status entity (ObjectId-based IDs, own-post detection)
 │   │   ├── notification.js       ← Notification entity
 │   │   ├── sanitize.js           ← HTML sanitization for API responses
 │   │   ├── relationship.js       ← Relationship entity
 │   │   ├── media.js              ← Media attachment entity
 │   │   └── instance.js           ← Instance info entity
 │   ├── helpers/
-│   │   ├── pagination.js         ← Published-date cursor pagination (NOT ObjectId-based)
+│   │   ├── pagination.js         ← ObjectId-based cursor pagination ($lt/$gt on _id)
 │   │   ├── id-mapping.js         ← Deterministic account IDs: sha256(actorUrl).slice(0,24)
 │   │   ├── interactions.js       ← Like/boost/bookmark via Fedify AP activities
 │   │   ├── resolve-account.js    ← Remote account resolution via Fedify WebFinger + actor fetch
+│   │   ├── resolve-reply-ids.js  ← Batch-resolve in_reply_to_id / in_reply_to_account_id
+│   │   ├── apply-filters.js      ← Keyword filter matching (hide/warn) per Mastodon v2 filters
 │   │   ├── account-cache.js      ← In-memory LRU cache for account stats (500 entries, 1h TTL)
 │   │   └── enrich-accounts.js    ← Batch-enrich embedded account stats in timeline responses
 │   ├── middleware/
 │   │   ├── cors.js               ← CORS for browser-based SPA clients
 │   │   ├── token-required.js     ← Bearer token → ap_oauth_tokens lookup
 │   │   ├── scope-required.js     ← OAuth scope validation
+│   │   ├── load-settings.js      ← Cache ap_settings into req.app.locals.apSettings (1 min TTL)
 │   │   └── error-handler.js      ← JSON error responses for API routes
 │   └── routes/
 │       ├── oauth.js              ← OAuth2 server: app registration, authorize, token, revoke
 │       ├── accounts.js           ← Account lookup, relationships, follow/unfollow, statuses
-│       ├── statuses.js           ← Status CRUD, context/thread, favourite, boost, bookmark
+│       ├── statuses.js           ← Status CRUD, context/thread, edit history, favourite, boost, bookmark
 │       ├── timelines.js          ← Home/public/hashtag timelines with account enrichment
 │       ├── notifications.js      ← Notification listing with type filtering
+│       ├── filters.js            ← Mastodon v2 keyword filters CRUD (ap_filters + ap_filter_keywords)
 │       ├── search.js             ← Account/status/hashtag search with remote resolution
 │       ├── instance.js           ← Instance info, nodeinfo, custom emoji, preferences
-│       ├── media.js              ← Media upload (stub)
+│       ├── media.js              ← Media upload (express-fileupload + IndieAuth bridge)
 │       └── stubs.js              ← 25+ stub endpoints preventing client errors
+├── lib/settings.js               ← getSettings(collections) — merges ap_settings over hardcoded DEFAULTS
 ├── lib/controllers/              ← Express route handlers (admin UI)
-│   ├── dashboard.js, reader.js, compose.js, profile.js, profile.remote.js
+│   ├── dashboard.js, reader.js, compose.js, profile.js, profile.remote.js, settings.js
 │   ├── public-profile.js         ← Public profile page (HTML fallback for actor URL)
 │   ├── explore.js, explore-utils.js ← Explore public Mastodon timelines
 │   ├── hashtag-explore.js        ← Cross-instance hashtag search
@@ -165,6 +170,10 @@ processing pipeline via item-processing.js:
 | `ap_oauth_apps` | Mastodon API client registrations | `clientId` (unique), `clientSecret`, `redirectUris` |
 | `ap_oauth_tokens` | OAuth2 authorization codes + access tokens | `code` (unique sparse), `accessToken` (unique sparse) |
 | `ap_markers` | Read position markers (Mastodon API) | `userId`, `timeline` |
+| `ap_settings` | Admin-configurable plugin settings (single doc) | merged over hardcoded DEFAULTS in `lib/settings.js` |
+| `ap_status_edits` | Status edit history snapshots | `statusId`, `content`, `summary`, `editedAt` |
+| `ap_filters` | Mastodon v2 keyword filter definitions | `title`, `context`, `filterAction`, `expiresAt` |
+| `ap_filter_keywords` | Keywords within filters | `filterId`, `keyword`, `wholeWord` |
 
 ## Critical Patterns and Gotchas
 
@@ -356,8 +365,8 @@ Do not create separate scroll components. The explore view uses `data-cursor-par
 Mounted at `/` (domain root) to serve `/api/v1/*`, `/api/v2/*`, `/oauth/*`.
 
 **Key design decisions:**
-- **Published-date pagination** — Status IDs are `encodeCursor(published)` (ms since epoch), NOT MongoDB ObjectIds
-- **Status lookup** — `findTimelineItemById()` must try both `"2026-03-21T15:33:50.000Z"` and `"2026-03-21T15:33:50Z"` (stored dates vary)
+- **ObjectId-based pagination** — Status IDs are `_id.toString()` (ObjectId hex), NOT published-date cursors. See section 36 for details.
+- **Status lookup** — `findTimelineItemById()` does a clean `{ _id: new ObjectId(id) }` lookup — no date parsing
 - **Own-post detection** — `setLocalIdentity(publicationUrl, handle)` at init; `serializeAccount()` compares `author.url === publicationUrl`
 - **Account enrichment** — Phanpy never calls `/accounts/:id` for timeline authors; `enrichAccountStats()` batch-resolves via Fedify, cached (500 entries, 1h TTL)
 - **OAuth for native apps** — Android Custom Tabs block 302 redirects to custom URI schemes; use HTML page with JS `window.location` redirect
@@ -390,7 +399,7 @@ Note: tags.pub does not send `Accept(Follow)` back and `@_followback@tags.pub` d
 
 `syncCollection: true` on `sendActivity()` attaches `Collection-Synchronization` headers. The **receiving side** (parsing inbound headers, reconciliation) is NOT implemented. Full compliance would require a `/followers-sync` endpoint.
 
-### 36. Mastodon API — Status IDs and Threading (v3.12.0+)
+### 37. Mastodon API — Status IDs and Threading (v3.12.0+)
 
 **Status IDs are MongoDB ObjectId hex strings** (`_id.toString()`), NOT published-date cursors. This guarantees uniqueness — the previous cursor-based IDs (`encodeCursor(published)`) caused collisions when multiple posts shared the same second, resulting in `findTimelineItemById` returning wrong documents.
 
@@ -400,7 +409,7 @@ Note: tags.pub does not send `Accept(Follow)` back and `@_followback@tags.pub` d
 - Pagination uses ObjectId ordering (`{ _id: -1 }`) — ObjectIds have a 4-byte timestamp prefix so chronological sort works
 - `encodeCursor`/`decodeCursor` removed from the API layer entirely
 
-### 37. Mastodon API — Own Post Handling (v3.10.1+)
+### 38. Mastodon API — Own Post Handling (v3.10.1+)
 
 Own posts are added to `ap_timeline` by the AP syndicator after successful delivery. The syndicator:
 - Builds content from JF2 properties via `buildTimelineContent()` (synthesizes content for likes/bookmarks/reposts)
@@ -411,11 +420,11 @@ Own posts are added to `ap_timeline` by the AP syndicator after successful deliv
 - **Permalink** — appended for own posts (detected via `author.url === _localPublicationUrl`). Matches the `🔗` link in federated AS2 content. Done at read time so it survives timeline cleanup/backfill.
 - **`@mention` links** — stored at write time on the `ap_timeline` entry with resolved `actorUrl` for deterministic Mastodon account IDs.
 
-### 38. Mastodon API — Access Tokens (v3.12.4+)
+### 39. Mastodon API — Access Tokens (v3.12.4+)
 
 **Access tokens do not expire.** They are valid until revoked, matching Mastodon's behavior. The previous 1-hour TTL caused Phanpy/Elk/Moshidon sessions to break silently. Refresh tokens expire after 90 days.
 
-### 39. Mastodon API — Timeline Filtering (v3.12.5+)
+### 40. Mastodon API — Timeline Filtering (v3.12.5+)
 
 **Reply filtering:** Public and hashtag timelines exclude replies (`inReplyTo: { $exists: false }`). Replies only appear in the context/thread view and the home timeline. This matches Mastodon/Pixelfed behavior.
 
@@ -425,7 +434,7 @@ Own posts are added to `ap_timeline` by the AP syndicator after successful deliv
 - `filterAction: "hide"` — status removed from response
 - `filterAction: "warn"` — status kept with `filtered` array attached (Mastodon v2 format)
 
-### 40. Admin Settings Page (v3.13.0+)
+### 41. Admin Settings Page (v3.13.0+)
 
 **Route:** `GET/POST {mountPath}/admin/settings`
 
@@ -517,6 +526,7 @@ On restart, `refollow:pending` entries reset to `import` to prevent stale claims
 | `GET/POST` | `{mount}/admin/featured` | Pinned posts | Yes |
 | `GET/POST` | `{mount}/admin/tags` | Featured tags | Yes |
 | `GET/POST` | `{mount}/admin/migrate` | Mastodon migration | Yes |
+| `GET/POST` | `{mount}/admin/settings` | Plugin settings editor | Yes |
 | `*` | `{mount}/admin/refollow/*` | Batch refollow control | Yes |
 | `*` | `{mount}/__debug__/*` | Fedify debug dashboard (if enabled) | Password |
 | `GET` | `{mount}/api/ap-url?post={url}` | Resolve blog post URL → AP object URL | No |
