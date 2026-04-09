@@ -1203,6 +1203,8 @@ export default class ActivityPubEndpoint {
     // Filters and filter keywords
     Indiekit.addCollection("ap_filters");
     Indiekit.addCollection("ap_filter_keywords");
+    // Persistent actor URL cache (survives server restarts; used by follow/unfollow)
+    Indiekit.addCollection("ap_actor_cache");
 
     // Plugin settings (single document, admin UI at /admin/settings)
     Indiekit.addCollection("ap_settings");
@@ -1253,6 +1255,8 @@ export default class ActivityPubEndpoint {
       // Filters and filter keywords
       ap_filters: indiekitCollections.get("ap_filters"),
       ap_filter_keywords: indiekitCollections.get("ap_filter_keywords"),
+      // Persistent actor URL cache (survives server restarts)
+      ap_actor_cache: indiekitCollections.get("ap_actor_cache"),
       get posts() {
         return indiekitCollections.get("posts");
       },
