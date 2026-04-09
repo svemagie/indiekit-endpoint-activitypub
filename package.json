@@ -49,9 +49,9 @@
     "unfurl.js": "^6.4.0"
   },
   "peerDependencies": {
-    "@indiekit/endpoint-micropub": "^1.0.0-beta.25",
-    "@indiekit/error": "^1.0.0-beta.25",
-    "@indiekit/frontend": "^1.0.0-beta.25"
+    "@indiekit/endpoint-micropub": "^1.0.0-beta.27",
+    "@indiekit/error": "^1.0.0-beta.27",
+    "@indiekit/frontend": "^1.0.0-beta.27"
   },
   "publishConfig": {
     "access": "public"
