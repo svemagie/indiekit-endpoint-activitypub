@@ -13,115 +13,22 @@ An Indiekit plugin that adds full ActivityPub federation via [Fedify](https://fe
 
 ## Architecture Overview
 
-```
-index.js                          ← Plugin entry, route registration, lifecycle orchestration
-├── lib/federation-setup.js       ← Fedify Federation instance, dispatchers, collections
-├── lib/federation-bridge.js      ← Express ↔ Fedify request/response bridge
-├── lib/federation-actions.js     ← Facade for controller federation access (context creation, actor resolution)
-├── lib/inbox-listeners.js        ← Fedify inbox listener registration + reply forwarding
-├── lib/inbox-handlers.js         ← Async inbox activity handlers (Create, Like, Announce, etc.)
-├── lib/inbox-queue.js            ← Persistent MongoDB-backed async inbox processing queue
-├── lib/outbox-failure.js         ← Outbox delivery failure handling (410 cleanup, 404 strikes, strike reset)
-├── lib/batch-broadcast.js        ← Shared batch delivery to followers (dedup, batching, logging)
-├── lib/jf2-to-as2.js             ← JF2 → ActivityStreams conversion (plain JSON + Fedify vocab)
-├── lib/syndicator.js             ← Indiekit syndicator factory (JF2→AS2, mention resolution, delivery)
-├── lib/kv-store.js               ← MongoDB-backed KvStore for Fedify (get/set/delete/list)
-├── lib/init-indexes.js           ← MongoDB index creation (idempotent startup)
-├── lib/activity-log.js           ← Activity logging to ap_activities
-├── lib/item-processing.js        ← Unified item processing pipeline (moderation, quotes, interactions, rendering)
-├── lib/timeline-store.js         ← Timeline item extraction + sanitization
-├── lib/timeline-cleanup.js       ← Retention-based timeline pruning
-├── lib/og-unfurl.js              ← Open Graph link previews + quote enrichment
-├── lib/key-refresh.js            ← Remote actor key freshness tracking (skip redundant re-fetches)
-├── lib/redis-cache.js            ← Redis-cached actor lookups (cachedQuery wrapper)
-├── lib/lookup-helpers.js         ← WebFinger/actor resolution utilities
-├── lib/lookup-cache.js           ← In-memory LRU cache for actor lookups
-├── lib/resolve-author.js         ← Author resolution with fallback chain
-├── lib/content-utils.js          ← Content sanitization and text processing
-├── lib/emoji-utils.js            ← Custom emoji detection and rendering
-├── lib/fedidb.js                 ← FediDB integration for popular accounts
-├── lib/batch-refollow.js         ← Gradual re-follow for imported Mastodon accounts
-├── lib/migration.js              ← CSV parsing + WebFinger resolution for Mastodon import
-├── lib/csrf.js                   ← CSRF token generation/validation
-├── lib/migrations/
-│   └── separate-mentions.js      ← Data migration: split mentions from notifications
-├── lib/storage/
-│   ├── timeline.js               ← Timeline CRUD with cursor pagination
-│   ├── notifications.js          ← Notification CRUD with read/unread tracking
-│   ├── moderation.js             ← Mute/block storage
-│   ├── server-blocks.js          ← Server-level domain blocking
-│   ├── followed-tags.js          ← Hashtag follow/unfollow storage
-│   └── messages.js               ← Direct message storage
-├── lib/mastodon/                 ← Mastodon Client API (Phanpy/Elk/Moshidon/Fedilab compatibility)
-│   ├── router.js                 ← Main router: body parsers, CORS, token resolution, sub-routers
-│   ├── backfill-timeline.js      ← Startup backfill: posts collection → ap_timeline
-│   ├── entities/                 ← Mastodon JSON entity serializers
-│   │   ├── account.js            ← Account entity (local + remote, with stats cache enrichment)
-│   │   ├── status.js             ← Status entity (ObjectId-based IDs, own-post detection)
-│   │   ├── notification.js       ← Notification entity
-│   │   ├── sanitize.js           ← HTML sanitization for API responses
-│   │   ├── relationship.js       ← Relationship entity
-│   │   ├── media.js              ← Media attachment entity
-│   │   └── instance.js           ← Instance info entity
-│   ├── helpers/
-│   │   ├── pagination.js         ← ObjectId-based cursor pagination ($lt/$gt on _id)
-│   │   ├── id-mapping.js         ← Deterministic account IDs: sha256(actorUrl).slice(0,24)
-│   │   ├── interactions.js       ← Like/boost/bookmark via Fedify AP activities
-│   │   ├── resolve-account.js    ← Remote account resolution via Fedify WebFinger + actor fetch
-│   │   ├── resolve-reply-ids.js  ← Batch-resolve in_reply_to_id / in_reply_to_account_id
-│   │   ├── apply-filters.js      ← Keyword filter matching (hide/warn) per Mastodon v2 filters
-│   │   ├── account-cache.js      ← In-memory LRU cache for account stats (500 entries, 1h TTL)
-│   │   └── enrich-accounts.js    ← Batch-enrich embedded account stats in timeline responses
-│   ├── middleware/
-│   │   ├── cors.js               ← CORS for browser-based SPA clients
-│   │   ├── token-required.js     ← Bearer token → ap_oauth_tokens lookup
-│   │   ├── scope-required.js     ← OAuth scope validation
-│   │   ├── load-settings.js      ← Cache ap_settings into req.app.locals.apSettings (1 min TTL)
-│   │   └── error-handler.js      ← JSON error responses for API routes
-│   └── routes/
-│       ├── oauth.js              ← OAuth2 server: app registration, authorize, token, revoke
-│       ├── accounts.js           ← Account lookup, relationships, follow/unfollow, statuses
-│       ├── statuses.js           ← Status CRUD, context/thread, edit history, favourite, boost, bookmark
-│       ├── timelines.js          ← Home/public/hashtag timelines with account enrichment
-│       ├── notifications.js      ← Notification listing with type filtering
-│       ├── filters.js            ← Mastodon v2 keyword filters CRUD (ap_filters + ap_filter_keywords)
-│       ├── search.js             ← Account/status/hashtag search with remote resolution
-│       ├── instance.js           ← Instance info, nodeinfo, custom emoji, preferences
-│       ├── media.js              ← Media upload (express-fileupload + IndieAuth bridge)
-│       └── stubs.js              ← 25+ stub endpoints preventing client errors
-├── lib/settings.js               ← getSettings(collections) — merges ap_settings over hardcoded DEFAULTS
-├── lib/controllers/              ← Express route handlers (admin UI)
-│   ├── dashboard.js, reader.js, compose.js, profile.js, profile.remote.js, settings.js
-│   ├── public-profile.js         ← Public profile page (HTML fallback for actor URL)
-│   ├── explore.js, explore-utils.js ← Explore public Mastodon timelines
-│   ├── hashtag-explore.js        ← Cross-instance hashtag search
-│   ├── tag-timeline.js           ← Posts filtered by hashtag
-│   ├── post-detail.js            ← Single post detail view
-│   ├── api-timeline.js           ← AJAX API for infinite scroll + new post count
-│   ├── followers.js, following.js, activities.js
-│   ├── featured.js, featured-tags.js
-│   ├── interactions.js, interactions-like.js, interactions-boost.js
-│   ├── moderation.js, migrate.js, refollow.js
-│   ├── messages.js               ← Direct message UI
-│   ├── follow-requests.js        ← Manual follow approval UI
-│   ├── follow-tag.js             ← Hashtag follow/unfollow actions
-│   ├── tabs.js                   ← Explore tab management
-│   ├── my-profile.js             ← Self-profile view
-│   ├── resolve.js                ← Actor/post resolution endpoint
-│   ├── authorize-interaction.js  ← Remote interaction authorization
-│   ├── federation-mgmt.js        ← Federation management (server blocks, moderation overview)
-│   └── federation-delete.js      ← Account deletion / federation cleanup
-├── views/                        ← Nunjucks templates
-│   ├── activitypub-*.njk         ← Page templates
-│   ├── layouts/ap-reader.njk     ← Reader layout (NOT reader.njk — see gotcha below)
-│   └── partials/                 ← Shared components (item card, quote embed, link preview, media)
-├── assets/
-│   ├── reader.css                ← Reader UI styles
-│   ├── reader-infinite-scroll.js ← Alpine.js components (infinite scroll, new posts banner, read tracking)
-│   ├── reader-tabs.js            ← Alpine.js tab persistence
-│   └── icon.svg                  ← Plugin icon
-└── locales/{en,de,es,fr,...}.json ← i18n strings (15 locales)
-```
+Key modules (files self-document via names — read source for full details):
+
+- **`index.js`** — Plugin entry, route registration, lifecycle orchestration
+- **`lib/federation-setup.js`** — Fedify instance, dispatchers, keys
+- **`lib/federation-bridge.js`** — Express ↔ Fedify bridge (uses `req.originalUrl` — see gotcha #1)
+- **`lib/inbox-listeners.js` / `inbox-handlers.js` / `inbox-queue.js`** — Inbound AP activities (async queue)
+- **`lib/outbox-failure.js`** — Delivery failure handler (410: full cleanup, 404: strike system)
+- **`lib/jf2-to-as2.js`** — JF2 → ActivityStreams conversion (plain JSON + Fedify vocab)
+- **`lib/syndicator.js`** — Indiekit syndicator (JF2→AS2, mention resolution, delivery)
+- **`lib/item-processing.js`** — Unified pipeline: moderation, quotes, interactions, rendering (see gotcha #23)
+- **`lib/mastodon/`** — Mastodon Client API (router, entities, helpers, middleware, routes)
+- **`lib/storage/`** — timeline, notifications, moderation, server-blocks, followed-tags, messages
+- **`lib/controllers/`** — Admin UI route handlers (dashboard, reader, profile, settings, etc.)
+- **`lib/settings.js`** — `getSettings(collections)`: merges `ap_settings` over hardcoded DEFAULTS
+- **`views/`** — Nunjucks templates (`activitypub-*.njk`; layout named `ap-reader.njk` — see gotcha #7)
+- **`assets/`** — `reader.css`, Alpine.js (`reader-infinite-scroll.js`, `reader-tabs.js`)
 
 ## Data Flow
 
@@ -482,90 +389,20 @@ import → refollow:pending → refollow:sent → refollow:failed (3 retries exc
 
 On restart, `refollow:pending` entries reset to `import` to prevent stale claims.
 
-## Plugin Lifecycle
-
-1. `constructor()` — Merges options with defaults
-2. `init(Indiekit)` — Called by Indiekit during startup:
-   - Stores `publication.me` as `_publicationUrl`
-   - Registers 13 MongoDB collections with indexes
-   - Seeds actor profile from config (first run only)
-   - Calls `setupFederation()` which creates Fedify instance + starts queue
-   - Registers endpoint (mounts routes) and syndicator
-   - Starts batch re-follow processor (10s delay)
-   - Schedules timeline cleanup (on startup + every 24h)
-
 ## Route Structure
 
-| Method | Path | Handler | Auth |
-|---|---|---|---|
-| `*` | `/.well-known/*` | Fedify (WebFinger, NodeInfo) | No |
-| `*` | `{mount}/users/*`, `{mount}/inbox` | Fedify (actor, inbox, outbox, collections) | No (HTTP Sig) |
-| `GET` | `{mount}/` | Dashboard | Yes (IndieAuth) |
-| `GET` | `{mount}/admin/reader` | Timeline reader | Yes |
-| `GET` | `{mount}/admin/reader/explore` | Explore public Mastodon timelines | Yes |
-| `GET` | `{mount}/admin/reader/explore/hashtag` | Cross-instance hashtag search | Yes |
-| `GET` | `{mount}/admin/reader/tag` | Tag timeline (posts by hashtag) | Yes |
-| `GET` | `{mount}/admin/reader/post` | Post detail view | Yes |
-| `GET` | `{mount}/admin/reader/notifications` | Notifications | Yes |
-| `GET` | `{mount}/admin/reader/api/timeline` | AJAX timeline API (infinite scroll) | Yes |
-| `GET` | `{mount}/admin/reader/api/timeline/count-new` | New post count API (polling) | Yes |
-| `POST` | `{mount}/admin/reader/api/timeline/mark-read` | Mark posts as read API | Yes |
-| `GET` | `{mount}/admin/reader/api/explore` | AJAX explore API (infinite scroll) | Yes |
-| `POST` | `{mount}/admin/reader/compose` | Compose reply | Yes |
-| `POST` | `{mount}/admin/reader/like,unlike,boost,unboost` | Interactions | Yes |
-| `POST` | `{mount}/admin/reader/follow,unfollow` | Follow/unfollow | Yes |
-| `POST` | `{mount}/admin/reader/follow-tag,unfollow-tag` | Follow/unfollow hashtag | Yes |
-| `GET` | `{mount}/admin/reader/profile` | Remote profile view | Yes |
-| `GET` | `{mount}/admin/reader/moderation` | Moderation dashboard | Yes |
-| `POST` | `{mount}/admin/reader/mute,unmute,block,unblock` | Moderation actions | Yes |
-| `GET/POST` | `{mount}/admin/reader/messages` | Direct messages | Yes |
-| `GET/POST` | `{mount}/admin/follow-requests` | Manual follow approval | Yes |
-| `GET/POST` | `{mount}/admin/federation` | Server blocking management | Yes |
-| `GET` | `{mount}/admin/followers,following,activities` | Lists | Yes |
-| `GET/POST` | `{mount}/admin/profile` | Actor profile editor | Yes |
-| `GET/POST` | `{mount}/admin/featured` | Pinned posts | Yes |
-| `GET/POST` | `{mount}/admin/tags` | Featured tags | Yes |
-| `GET/POST` | `{mount}/admin/migrate` | Mastodon migration | Yes |
-| `GET/POST` | `{mount}/admin/settings` | Plugin settings editor | Yes |
-| `*` | `{mount}/admin/refollow/*` | Batch refollow control | Yes |
-| `*` | `{mount}/__debug__/*` | Fedify debug dashboard (if enabled) | Password |
-| `GET` | `{mount}/api/ap-url?post={url}` | Resolve blog post URL → AP object URL | No |
-| `GET` | `{mount}/users/:identifier` | Public profile page (HTML fallback) | No |
-| `GET` | `/*` (root) | Content negotiation (AP clients only) | No |
-| | **Mastodon Client API (mounted at `/`)** | |
-| `POST` | `/api/v1/apps` | Register OAuth client | No |
-| `GET` | `/oauth/authorize` | Authorization page | IndieAuth |
-| `POST` | `/oauth/authorize` | Process authorization | IndieAuth |
-| `POST` | `/oauth/token` | Token exchange | No |
-| `POST` | `/oauth/revoke` | Revoke token | No |
-| `GET` | `/api/v1/accounts/verify_credentials` | Current user | Bearer |
-| `GET` | `/api/v1/accounts/lookup` | Account lookup | Bearer |
-| `GET` | `/api/v1/accounts/relationships` | Follow/block/mute state | Bearer |
-| `GET` | `/api/v1/accounts/:id` | Account details | Bearer |
-| `GET` | `/api/v1/accounts/:id/statuses` | Account posts | Bearer |
-| `POST` | `/api/v1/accounts/:id/follow,unfollow` | Follow/unfollow via Fedify | Bearer |
-| `POST` | `/api/v1/accounts/:id/block,unblock,mute,unmute` | Moderation | Bearer |
-| `GET` | `/api/v1/timelines/home,public,tag/:hashtag` | Timelines | Bearer |
-| `GET/POST` | `/api/v1/statuses` | Get/create status (via Micropub pipeline) | Bearer |
-| `GET` | `/api/v1/statuses/:id/context` | Thread (ancestors + descendants) | Bearer |
-| `POST` | `/api/v1/statuses/:id/favourite,reblog,bookmark` | Interactions via Fedify | Bearer |
-| `GET` | `/api/v1/notifications` | Notifications | Bearer |
-| `GET` | `/api/v2/search` | Search with remote resolution | Bearer |
-| `GET` | `/api/v1/domain_blocks` | Blocked server domains | Bearer |
-| `GET` | `/api/v1/instance`, `/api/v2/instance` | Instance info | No |
+Key non-obvious routes (full list in `index.js`):
 
-## Dependencies
-
-| Package | Purpose |
+| Path | Notes |
 |---|---|
-| `@fedify/fedify` | ActivityPub federation framework (v2.0+) |
-| `@fedify/debugger` | Optional debug dashboard with OpenTelemetry tracing |
-| `@fedify/redis` | Redis message queue for delivery |
-| `@js-temporal/polyfill` | Temporal API for Fedify date handling |
-| `ioredis` | Redis client |
-| `sanitize-html` | XSS prevention for timeline/notification content |
-| `unfurl.js` | Open Graph metadata extraction for link previews |
-| `express` | Route handling (peer: Indiekit provides it) |
+| `/.well-known/*` | Fedify — WebFinger, NodeInfo |
+| `{mount}/users/*`, `{mount}/inbox` | Fedify — actor, inbox, outbox, collections (HTTP Sig) |
+| `{mount}/admin/*` | Admin UI — IndieAuth required; Fedify explicitly skipped for these paths (see gotcha #3) |
+| `{mount}/api/ap-url?post={url}` | Resolve blog post URL → AP URL (public, no auth) — svemagie fork |
+| `{mount}/users/:identifier` | Public profile HTML fallback |
+| `/*` (root GET/HEAD only) | Content negotiation for AP clients (see gotcha #2) |
+| `/api/v1/*`, `/api/v2/*`, `/oauth/*` | Mastodon Client API (mounted at domain root `/`) |
+| `/accounts/relationships`, `/accounts/familiar_followers` | MUST be defined BEFORE `/accounts/:id` |
 
 ## Standards Compliance
 
