@@ -506,11 +506,18 @@ export default class ActivityPubEndpoint {
     router.use((req, res, next) => {
       if (!self._fedifyMiddleware) return next();
       if (req.method !== "GET" && req.method !== "HEAD") return next();
-      // Only delegate to Fedify for NodeInfo data endpoint (/nodeinfo/2.1).
-      // All other paths in this root-mounted router are handled by the
-      // content negotiation catch-all below. Passing arbitrary paths like
-      // /notes/... to Fedify causes harmless but noisy 404 warnings.
-      if (!req.path.startsWith("/nodeinfo/")) return next();
+      // Delegate to Fedify for discovery endpoints:
+      //   /.well-known/webfinger  — actor/resource identity resolution
+      //   /.well-known/nodeinfo   — server capabilities advertised to the fediverse
+      //   /nodeinfo/2.1           — NodeInfo data document
+      // This router is mounted at "/" so req.url retains the full path, allowing
+      // Fedify to match its internal routes correctly. (routesWellKnown strips
+      // the /.well-known/ prefix, causing Fedify to miss the webfinger route.)
+      // ap-webfinger-before-auth patch
+      const isDiscoveryRoute =
+        req.path.startsWith("/nodeinfo/") ||
+        req.path.startsWith("/.well-known/");
+      if (!isDiscoveryRoute) return next();
       return self._fedifyMiddleware(req, res, next);
     });
 
@@ -689,15 +696,30 @@ export default class ActivityPubEndpoint {
         remoteActor.name?.toString() ||
         remoteActor.preferredUsername?.toString() ||
         actorUrl;
-      const actorHandle =
-        actorInfo.handle ||
-        remoteActor.preferredUsername?.toString() ||
-        "";
-      const avatar =
-        actorInfo.photo ||
-        (remoteActor.icon
-          ? (await remoteActor.icon)?.url?.href || ""
-          : "");
+      let _enrichedAvatar = "";
+      try {
+        if (typeof remoteActor.getIcon === "function") {
+          const _iconObj = await remoteActor.getIcon();
+          _enrichedAvatar = _iconObj?.url?.href || "";
+        }
+      } catch { /* icon fetch failed */ }
+      let _enrichedHandle = "";
+      try {
+        const _username = remoteActor.preferredUsername?.toString() || "";
+        if (_username && actorUrl) {
+          const _domain = new URL(actorUrl).hostname;
+          _enrichedHandle = `@${_username}@${_domain}`;
+        }
+      } catch { /* URL parse failed */ }
+      let _enrichedBanner = "";
+      try {
+        if (typeof remoteActor.getImage === "function") {
+          const _imgObj = await remoteActor.getImage();
+          _enrichedBanner = _imgObj?.url?.href || "";
+        }
+      } catch { /* banner fetch failed */ }
+      const actorHandle = actorInfo.handle || _enrichedHandle || remoteActor.preferredUsername?.toString() || "";
+      const avatar = actorInfo.photo || _enrichedAvatar || "";
       const inbox = remoteActor.inboxId?.href || "";
       const sharedInbox = remoteActor.endpoints?.sharedInbox?.href || "";
 
@@ -711,6 +733,7 @@ export default class ActivityPubEndpoint {
             avatar,
             inbox,
             sharedInbox,
+            banner: _enrichedBanner || "",
             followedAt: new Date().toISOString(),
             source: "reader",
           },
@@ -1295,7 +1318,7 @@ export default class ActivityPubEndpoint {
     });
 
     this._federation = federation;
-    this._fedifyMiddleware = createFedifyMiddleware(federation, () => ({}));
+    this._fedifyMiddleware = createFedifyMiddleware(federation, () => ({}), this._publicationUrl); // ap-base-url patch
 
     // Expose signed avatar resolver for cross-plugin use (e.g., conversations backfill)
     Indiekit.config.application.resolveActorAvatar = async (actorUrl) => {
@@ -1348,6 +1371,7 @@ export default class ActivityPubEndpoint {
         broadcastActorUpdate: () => pluginRef.broadcastActorUpdate(),
         loadRsaKey: () => pluginRef._loadRsaPrivateKey(),
         broadcastActorUpdate: () => pluginRef.broadcastActorUpdate(),
+        broadcastDelete: (url) => pluginRef.broadcastDelete(url),
       },
     });
     Indiekit.addEndpoint({
