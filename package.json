@@ -37,9 +37,9 @@
     "url": "https://github.com/rmdes/indiekit-endpoint-activitypub/issues"
   },
   "dependencies": {
-    "@fedify/debugger": "^2.1.0",
-    "@fedify/fedify": "^2.1.0",
-    "@fedify/redis": "^2.1.0",
+    "@fedify/debugger": "^2.1.12",
+    "@fedify/fedify": "^2.1.12",
+    "@fedify/redis": "^2.1.12",
     "@js-temporal/polyfill": "^0.5.0",
     "@rmdes/indiekit-startup-gate": "^1.0.0",
     "express": "^5.0.0",
