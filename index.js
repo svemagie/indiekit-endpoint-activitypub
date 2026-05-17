@@ -120,6 +120,7 @@ import { logActivity } from "./lib/activity-log.js";
 import { batchBroadcast } from "./lib/batch-broadcast.js";
 import { resolveAuthor } from "./lib/resolve-author.js";
 import { scheduleCleanup } from "./lib/timeline-cleanup.js";
+import { backfillFromOutbox } from "./lib/outbox-backfill.js";
 import { runSeparateMentionsMigration } from "./lib/migrations/separate-mentions.js";
 import { loadBlockedServersToRedis } from "./lib/storage/server-blocks.js";
 import { scheduleKeyRefresh } from "./lib/key-refresh.js";
@@ -742,6 +743,15 @@ export default class ActivityPubEndpoint {
       );
 
       console.info(`[ActivityPub] Sent Follow to ${actorUrl}`);
+
+      // Backfill recent posts from the remote outbox — fire-and-forget
+      backfillFromOutbox({
+        actorUrl,
+        remoteActor,
+        ctx,
+        handle,
+        collections: this._collections,
+      }).catch(() => {});
 
       await logActivity(this._collections.ap_activities, {
         direction: "outbound",
